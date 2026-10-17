@@ -5,7 +5,7 @@ import { ApiService } from '../../core/services/api.service';
 
 interface User {
   id: string;
-  username: string;
+  username?: string;
   email: string;
   displayName: string;
   role: string;
@@ -45,6 +45,9 @@ interface FeaturePermission {
           Create User
         </button>
       </div>
+      @if (formSuccess()) {
+        <p class="form-success" role="status">{{ formSuccess() }}</p>
+      }
 
       <div class="admin-content">
         <div class="users-table-wrapper" style="margin-bottom: 1.5rem; padding: 1rem 1.25rem;">
@@ -137,13 +140,12 @@ interface FeaturePermission {
               <button class="modal-close" (click)="showCreateUserModal.set(false)">×</button>
             </div>
             <form [formGroup]="userForm" (ngSubmit)="createUser()">
+              @if (formError()) {
+                <p class="form-error" role="alert">{{ formError() }}</p>
+              }
               <div class="form-group">
-                <label>Username</label>
-                <input type="text" formControlName="username" class="pv-input" />
-              </div>
-              <div class="form-group">
-                <label>Email</label>
-                <input type="email" formControlName="email" class="pv-input" />
+                <label>Email address</label>
+                <input type="email" formControlName="email" class="pv-input" autocomplete="email" />
               </div>
               <div class="form-group">
                 <label>Full Name</label>
@@ -151,7 +153,7 @@ interface FeaturePermission {
               </div>
               <div class="form-group">
                 <label>Password</label>
-                <input type="password" formControlName="password" class="pv-input" />
+                <input type="password" formControlName="password" class="pv-input" autocomplete="new-password" />
               </div>
               <div class="form-group">
                 <label>Role</label>
@@ -380,6 +382,22 @@ interface FeaturePermission {
       padding: 1.5rem;
       border-top: 1px solid var(--pv-border);
     }
+    .form-error {
+      margin: 1rem 1.5rem 0;
+      padding: 0.75rem 1rem;
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      border-radius: 8px;
+      color: #fca5a5;
+      background: rgba(239, 68, 68, 0.1);
+    }
+    .form-success {
+      margin: 0 0 1rem;
+      padding: 0.75rem 1rem;
+      border: 1px solid rgba(34, 197, 94, 0.35);
+      border-radius: 8px;
+      color: #86efac;
+      background: rgba(34, 197, 94, 0.1);
+    }
   `]
 })
 export class AdminComponent implements OnInit {
@@ -415,10 +433,9 @@ export class AdminComponent implements OnInit {
     private fb: FormBuilder
   ) {
     this.userForm = this.fb.group({
-      username: ['', Validators.required],
       email: ['', [Validators.required, Validators.email]],
-      fullName: ['', Validators.required],
-      password: ['', [Validators.required, Validators.minLength(6)]],
+      fullName: ['', [Validators.required, Validators.minLength(2)]],
+      password: ['', [Validators.required, Validators.minLength(8)]],
       role: ['EMPLOYEE', Validators.required],
       featurePermissions: [[]]
     });
@@ -440,7 +457,7 @@ export class AdminComponent implements OnInit {
           id: u.id,
           username: u.username,
           email: u.email,
-          displayName: u.fullName || u.username,
+          displayName: u.fullName || u.email,
           role: u.role,
           active: u.active,
           featurePermissions: u.featurePermissions || [],
@@ -472,9 +489,11 @@ export class AdminComponent implements OnInit {
 
   openCreate() {
     this.editingId.set(null);
+    this.formError.set('');
+    this.formSuccess.set('');
     this.selectedWorkspaceIds.set([]);
     this.userForm.reset({ role: 'EMPLOYEE', featurePermissions: [] });
-    this.userForm.get('password')?.setValidators([Validators.required, Validators.minLength(6)]);
+    this.userForm.get('password')?.setValidators([Validators.required, Validators.minLength(8)]);
     this.userForm.get('password')?.updateValueAndValidity();
     this.showCreateUserModal.set(true);
   }
@@ -485,9 +504,9 @@ export class AdminComponent implements OnInit {
 
   createUser() {
     if (this.userForm.valid) {
+      this.formError.set('');
       const formValue = this.userForm.value;
       const payload = {
-        username: formValue.username,
         email: formValue.email,
         fullName: formValue.fullName,
         password: formValue.password,
@@ -502,24 +521,28 @@ export class AdminComponent implements OnInit {
         : this.apiService.post<any>('/admin/users', payload);
       request.subscribe({
         next: () => {
+          this.formSuccess.set(this.editingId() ? 'Account updated successfully.' : 'Account created successfully.');
           this.showCreateUserModal.set(false);
           this.editingId.set(null);
           this.selectedWorkspaceIds.set([]);
           this.userForm.reset({ role: 'EMPLOYEE', featurePermissions: [] });
           this.loadUsers();
         },
-        error: (error) => console.error('Failed to save user:', error)
+        error: (error) => {
+          this.formError.set(error?.error?.message || 'Unable to save this account.');
+        }
       });
     }
   }
 
   editUser(user: User) {
+    this.formError.set('');
+    this.formSuccess.set('');
     this.editingId.set(user.id);
     this.selectedWorkspaceIds.set([...(user.workspaceIds || [])]);
     this.userForm.get('password')?.clearValidators();
     this.userForm.get('password')?.updateValueAndValidity();
     this.userForm.patchValue({
-      username: user.username,
       email: user.email,
       fullName: user.displayName,
       password: '',
@@ -530,11 +553,14 @@ export class AdminComponent implements OnInit {
   }
 
   toggleUserStatus(user: User) {
-    this.apiService.put<any>(`/api/v1/admin/users/${user.id}/active`, { active: !user.active }).subscribe({
+    this.apiService.toggleUserActive(user.id, !user.active).subscribe({
       next: () => this.loadUsers(),
       error: (error) => console.error('Failed to toggle user status:', error)
     });
   }
+
+  formError = signal('');
+  formSuccess = signal('');
 
   getInitials(name: string): string {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);

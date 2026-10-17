@@ -44,11 +44,11 @@ public class AuthController {
     public ResponseEntity<ApiResponse<LoginResponse>> login(@Valid @RequestBody LoginRequest request) {
         try {
             authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(request.username(), request.password())
+                    new UsernamePasswordAuthenticationToken(request.email().trim().toLowerCase(), request.password())
             );
 
-            User user = userRepository.findByUsername(request.username())
-                    .orElseThrow(() -> new ResourceNotFoundException("User not found: " + request.username()));
+            User user = userRepository.findByEmailIgnoreCase(request.email().trim())
+                    .orElseThrow(() -> new ResourceNotFoundException("User not found"));
             if (!user.isActive()) {
                 throw new UnauthorizedAccessException("This account is inactive");
             }
@@ -59,7 +59,7 @@ public class AuthController {
             }
 
             auditService.log(user.getId(), user.getRole(), com.pusula.km.model.enums.AuditAction.LOGIN_SUCCESS,
-                    "User", user.getId().toString(), user.getUsername(), "127.0.0.1", true, null, deviceStatus);
+                    "User", user.getId().toString(), user.getEmail(), "127.0.0.1", true, null, deviceStatus);
 
             if ("PENDING".equals(deviceStatus)) {
                 String pending = tokenProvider.createPendingToken(user.getId(), user.getUsername(), user.getRole().name());
@@ -72,21 +72,21 @@ public class AuthController {
             String token = tokenProvider.createToken(user.getId(), user.getUsername(), user.getRole().name());
             return ResponseEntity.ok(ApiResponse.success(session(user, token, "APPROVED", "Login successful"), "Login successful"));
         } catch (BadCredentialsException e) {
-            userRepository.findByUsername(request.username()).ifPresent(user ->
+            userRepository.findByEmailIgnoreCase(request.email().trim()).ifPresent(user ->
                 auditService.log(user.getId(), user.getRole(), com.pusula.km.model.enums.AuditAction.LOGIN_FAILURE,
-                        "User", user.getId().toString(), user.getUsername(), "127.0.0.1", false, null, null)
+                        "User", user.getId().toString(), user.getEmail(), "127.0.0.1", false, null, null)
             );
-            throw new UnauthorizedAccessException("Invalid username or password");
+            throw new UnauthorizedAccessException("Invalid email or password");
         } catch (ResourceNotFoundException e) {
             throw e;
         } catch (UnauthorizedAccessException e) {
             throw e;
         } catch (Exception e) {
-            userRepository.findByUsername(request.username()).ifPresent(user ->
+            userRepository.findByEmailIgnoreCase(request.email().trim()).ifPresent(user ->
                 auditService.log(user.getId(), user.getRole(), com.pusula.km.model.enums.AuditAction.LOGIN_FAILURE,
-                        "User", user.getId().toString(), user.getUsername(), "127.0.0.1", false, null, null)
+                        "User", user.getId().toString(), user.getEmail(), "127.0.0.1", false, null, null)
             );
-            throw new UnauthorizedAccessException("Authentication failed: " + e.getMessage());
+            throw new UnauthorizedAccessException("Authentication failed");
         }
     }
 

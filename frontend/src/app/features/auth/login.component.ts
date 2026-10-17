@@ -19,15 +19,15 @@ import { AuthService, deviceId } from '../../core/auth/auth.service';
         @if (!waiting()) {
           <form (ngSubmit)="onLogin()">
             <div class="form-group">
-              <label class="pv-label">Username</label>
-              <input type="text" [(ngModel)]="username" name="username" required class="pv-input" placeholder="Username" />
+              <label class="pv-label">Email address</label>
+              <input type="email" [(ngModel)]="email" name="email" required email class="pv-input" placeholder="you@company.com" autocomplete="email" />
             </div>
             <div class="form-group">
               <label class="pv-label">Password</label>
-              <input type="password" [(ngModel)]="password" name="password" required class="pv-input" placeholder="Password" />
+              <input type="password" [(ngModel)]="password" name="password" required minlength="8" class="pv-input" placeholder="Password" autocomplete="current-password" />
             </div>
             @if (error) {
-              <p class="login-error">{{ error }}</p>
+              <p class="login-error" role="alert">{{ error }}</p>
             }
             <button type="submit" class="pv-btn pv-btn-primary" style="width: 100%;" [disabled]="busy">
               {{ busy ? 'Signing in…' : 'Sign in' }}
@@ -73,7 +73,7 @@ import { AuthService, deviceId } from '../../core/auth/auth.service';
   `]
 })
 export class LoginComponent implements OnDestroy {
-  username = '';
+  email = '';
   password = '';
   error = '';
   busy = false;
@@ -92,7 +92,7 @@ export class LoginComponent implements OnDestroy {
   onLogin() {
     this.error = '';
     this.busy = true;
-    this.authService.login({ username: this.username, password: this.password }).subscribe({
+    this.authService.login({ email: this.email, password: this.password }).subscribe({
       next: (res) => {
         this.busy = false;
         const data = res.data;
@@ -108,7 +108,7 @@ export class LoginComponent implements OnDestroy {
       },
       error: (err) => {
         this.busy = false;
-        this.error = err?.error?.message || 'Login failed. Check the username and password from your admin.';
+        this.error = err?.error?.message || 'Invalid email or password. Check your credentials and try again.';
       }
     });
   }
