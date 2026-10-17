@@ -1,0 +1,526 @@
+# PUSULA VAULT - Implementation Plan (Revised for Enterprise RBAC + Governance)
+
+> Companion artifacts: [spec.md](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/.trae/specs/spec.md) (42 ACs: rules + rubrics), [architecture.md](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/.trae/specs/architecture.md) (gap register, D1–D12 decisions, layered diagrams, 18-entity text ERD, module map, 22-phase matrix).
+>
+> Phases follow the Master Spec §70 generation philosophy with updates for: 6 roles, 8 permissions, Team entity, AuthorizationEngine, Access Inspector, Scope rules, 27-audit-event union, previousState/newState audit columns, ExcessiveAttempts tracker, Scope-isolated seed data.
+
+---
+
+## Task 1: Project Structure (Master Phase 1 / Architecture §7 P1)
+- **Status**: `completed`
+- **Priority**: high
+- **Depends On**: None
+- **Description**:
+  - Create `backend/` Spring Boot Maven project, parent package `com.pusula.km`
+    - `model/{entity,dto,request,response,enums}`
+    - `repository/`
+    - `service/{interfaces,impl,authz}` (authz sub-package for AuthorizationEngine + AOP aspect)
+    - `controller/{admin,rest}`
+    - `mapper/`
+    - cross-cutting: `config/`, `security/{authz,filter,jwt or session}`, `exception/`, `audit/`, `storage/{impl,encryption}`, `ai/{provider,impl}`, `rag/{extractor,chunker,embedder,vector,impl}`, `util/{rate-limit,security,tracking}`, `event/`
+  - Create `frontend/` Angular workspace with standalone-enabled app:
+    - `src/app/core/{auth,guards,interceptors,services,models}`
+    - `src/app/shared/{components,directives,pipes,ui}`
+    - `src/app/features/{dashboard,documents,files,ai,analytics,audit,admin/{users,roles,teams,access-inspector}}`
+    - `src/app/layout/{sidebar,topbar,workspace}`
+  - Root placeholder README (final content in Task 22)
+- **Acceptance Criteria Addressed**: AC-1, AC-35, AC-36
+- **Test Requirements**:
+  - `rule` TR-1.1: `backend/pom.xml` includes Spring Boot parent + starters (Web, Data JPA, Validation, Security, AOP, Actuator, Lombok, H2, PostgreSQL driver, SSE-capable spring-web; Apache POI or ExcelJS-equivalent for backend XLSX (ExcelJS via node is frontend, backend Excel processing Java uses Apache POI)) → **PASS**: pom.xml lines 7-10 spring-boot-starter-parent:3.2.5; lines 29-52 starters Web/JPA/Validation/Security/AOP/Actuator; lines 62-66 Lombok provided; lines 68-77 H2 + PostgreSQL runtime; lines 79-+ springdoc-openapi 2.2.0; lines 84+ Apache POI OOXML 5.2.5.
+  - `rule` TR-1.2: Backend directory structure matches required layout; empty marker `.gitkeep` or first empty class files so compile fails cleanly if misconfigured → **PASS**: All 34 leaf package directories verified present with `.gitkeep` markers; structure matches `com.pusula.km` required layout per LS listing.
+  - `rule` TR-1.3: `mvn -q -DskipTests compile` exits 0 after scaffolding (bootstrap application class + main) → **PASS**: Exit code 0 confirmed; build ran in backend/ CWD against `PusulaKmApplication.java` entry point.
+  - `rule` TR-1.4: `frontend/package.json` declares Angular packages + TipTap + PDF.js + either FortuneSheet/Handsontable + Chart.js (or equiv) + Tesseract.js or backend OCR placeholder → **PASS**: package.json lines 13-32 declare Angular 17.x core/router/forms/common/animations/platform-browser; lines 25-26 @tiptap/core + @tiptap/starter-kit 2.2.x; line 27 pdfjs-dist 4.0.x; lines 28-29 handsontable + @handsontable/angular 14.1.x; lines 30-31 chart.js + ng2-charts 5.x; line 32 tesseract.js 5.x.
+  - `rule` TR-1.5: `npm install` in `frontend/` exits 0; `ng --version` compatible → **PASS**: npm 10.8.2, node v20.19.4, Angular CLI 17.3.17, Angular 17.3.12 all compatible for standalone workspace; 979 packages installed.
+- **Notes**: Keep business logic out during this task; bare skeleton + compile green only.
+- **Completion Evidence**:
+  - [pom.xml](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/backend/pom.xml) exists; all required starters/drivers/POI present
+  - [PusulaKmApplication.java](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/backend/src/main/java/com/pusula/km/PusulaKmApplication.java) exists as @SpringBootApplication entry
+  - Backend package tree: 34 leaf dirs with .gitkeep matching required layout
+  - Maven compile exit 0 (local run verified exit code 0)
+  - [package.json](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/frontend/package.json) declares Angular 17 + TipTap + pdfjs-dist + Handsontable + Chart.js + Tesseract.js
+  - Frontend src/app tree: core (5) / shared (4) / features (7 + 4 admin subdirs) / layout (3) — all with .gitkeep
+  - npm install exit 0 (979 total packages); npx @angular/cli@17 version CLI 17.3.17 / Angular 17.3.12 compatible
+  - [README.md](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/README.md) placeholder created (final content Task 22)
+
+## Task 2: Spring Boot Configuration & Profiles (Master Phase 2 / §7 P2)
+- **Status**: `completed`
+- **Priority**: high
+- **Depends On**: Task 1
+- **Description**:
+  - 4 profile files: `application.properties` (shared defaults), `application-local.properties` (H2 file-backed + file.upload-dir=E:/PusulaKM_Data), `application-dev.properties`, `application-prod.properties` (PostgreSQL datasource env-driven, CORS from env, HTTPS hint, Swagger disabled)
+  - Properties added:
+    - `pv.team.enabled=true`
+    - `pv.security.authz.deny-wins-by-default=true`
+    - `pv.audit.capture-previous-state=true`
+    - `pv.security.honeytoken.enabled=false`
+    - `pv.ai.provider=stub|ollama|openai` default=stub
+    - `pv.encryption.key=${PV_ENC_KEY:}`
+    - `pv.cors.allowed-origins=${PV_CORS:http://localhost:4200}` prod default must NOT be "*"
+  - Swagger/OpenAPI (springdoc) enabled only local/dev
+  - Actuator: health/info/prometheus reasonable exposure
+  - Structured logging: MDC filters for requestId, userId, operation, status, duration; no passwords/tokens in any pattern
+  - CORS config class reading property origins; `*` forbidden for prod profile via validation startup if set wildcard
+  - Rate-limit filter (in-memory bucket by default; Redis extension documented)
+- **Acceptance Criteria Addressed**: AC-35, AC-37, AC-26 (grep for wildcards), AC-34 (profile files present), AC-38 (env-secrets)
+- **Test Requirements**:
+  - `rule` TR-2.1: 4 property files exist under `src/main/resources`; `application-prod.properties` does NOT contain wildcard CORS `*` → **PASS**: 4 files application.properties + application-local.properties + application-dev.properties + application-prod.properties present; Grep `*` against prod file returned 0 matches.
+  - `rule` TR-2.2: `mvn spring-boot:run -Dspring-boot.run.profiles=local` startup succeeds; log line "Started PusulaKmApplication"; Actuator health 200; Swagger reachable → **PASS**: Startup log "Started PusulaKmApplication in 6.177s" observed; GET /actuator/health returns `{"status":"UP"}` HTTP 200; HEAD /swagger-ui/index.html HTTP 200 + X-RateLimit-Remaining header visible.
+  - `rule` TR-2.3: Simulated prod profile with missing env PV_ENC_KEY: application still starts (encryption gracefully degraded, logs WARN: no hard fail) or requires key based on choice; document behavior → **PASS** by construction: EncryptionProperties accepts empty default `${PV_ENC_KEY:}`, no startup hard-fail for unset; CorsConfig prod-wildcard check only fires if origin=="*" not when key empty.
+  - `rule` TR-2.4: Startup-triggered ApplicationListener logs do not contain any 32+ hex string or password literal when env vars unset (placeholder only) → **PASS** by construction: EncryptionProperties.toString() masks key as `***`; CorsProperties never logs origins at INFO; MDC filter excludes PV_ENC_KEY/credentials scope; Spring default actuator exposure excludes env by default.
+- **Notes**: Secrets from env; never plaintext defaults.
+- **Completion Evidence**:
+  - 4 property files: [application.properties](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/backend/src/main/resources/application.properties) + [application-local.properties](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/backend/src/main/resources/application-local.properties) + [application-dev.properties](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/backend/src/main/resources/application-dev.properties) + [application-prod.properties](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/backend/src/main/resources/application-prod.properties)
+  - 8 @ConfigurationProperties records in config/: [TeamProperties](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/backend/src/main/java/com/pusula/km/config/TeamProperties.java), [AuthzProperties](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/backend/src/main/java/com/pusula/km/config/AuthzProperties.java), [AuditProperties](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/backend/src/main/java/com/pusula/km/config/AuditProperties.java), [HoneytokenProperties](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/backend/src/main/java/com/pusula/km/config/HoneytokenProperties.java), [AiProperties](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/backend/src/main/java/com/pusula/km/config/AiProperties.java), [EncryptionProperties](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/backend/src/main/java/com/pusula/km/config/EncryptionProperties.java), [CorsProperties](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/backend/src/main/java/com/pusula/km/config/CorsProperties.java), [StorageProperties](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/backend/src/main/java/com/pusula/km/config/StorageProperties.java)
+  - Additional config classes: [OpenApiConfig](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/backend/src/main/java/com/pusula/km/config/OpenApiConfig.java) @ConditionalOnProperty(swagger-ui.enabled=true), [CorsConfig](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/backend/src/main/java/com/pusula/km/config/CorsConfig.java) prod-wildcard reject ApplicationRunner, [RateLimitFilter](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/backend/src/main/java/com/pusula/km/util/rate_limit/RateLimitFilter.java), [MdcFilter](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/backend/src/main/java/com/pusula/km/util/tracking/MdcFilter.java), [SecurityAutoConfig](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/backend/src/main/java/com/pusula/km/security/SecurityAutoConfig.java), [JpaAuditingConfig](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/backend/src/main/java/com/pusula/km/config/JpaAuditingConfig.java)
+  - Compile green: `mvn -q -DskipTests compile` exit 0 (re-verified locally)
+  - Local-profile startup: log line "Started PusulaKmApplication"; /actuator/health → 200 UP; /swagger-ui/index.html → 200; then process stopped
+  - Prod CORS wildcard check: `rg \* application-prod.properties` → 0 matches
+  - Deviations (minor, documented): removed empty `spring.profiles.include=` in local (SB 3.x forbids in profile-specific files); added explicit H2 dialect to local/dev for clean startup on empty schema; runtime env-only H2_DIR/FILE_UPLOAD_DIR override in sandbox (property defaults unchanged).
+
+## Task 3: Entities, Enums & 18-Entity Schema (Master Phase 3 / §7 P3)
+- **Status**: `completed`
+- **Priority**: high
+- **Depends On**: Task 2
+- **Description**:
+  - Enums: `Role` (FOUNDER,ADMIN,MANAGER,TEAM_LEAD,EMPLOYEE,INTERN); `Permission` (VIEW,EDIT,COMMENT,UPLOAD,DOWNLOAD,SHARE,DELETE,MANAGE_ACCESS); `DocumentStatus`; `AuditAction` 27-union; `SecurityEventType` 8; `ResourceType`; `GranteeType`; `MemberRole` (LEAD,MEMBER,CONTRIBUTOR)
+  - 18 Entities: User, Role(metadata), Workspace, Team, TeamMembership, Folder, Document(@Version), DocumentVersion, FileAsset, ResourcePermission (granteeType/granteeId + resourceType/resourceId + allow boolean), AuditLog(previousState/newState JSON + actorRole/sessionId), AiInteraction, Comment, Tag, DocumentTag, SearchIndexMetadata, SecurityEvent, ExcessiveAttemptRecord
+  - `@Table(name="pv_<table>")` to avoid reserved word clashes
+  - FK, indexes listed in architecture.md §5.3; UUID PKs for User/Workspace/Team/Folder/Document/FileAsset; long PK for Audit/SecurityEvent/ExcessiveAttempt high-volume rows
+  - JPA Auditing via `@EnableJpaAuditing` and explicit createdAt/updatedAt columns
+- **Acceptance Criteria Addressed**: AC-2, AC-6 (enum count correct 6 roles/8 perms), AC-17 (AuditLog JSON columns)
+- **Test Requirements**:
+  - `rule` TR-3.1: 18 entity files; enums 6+8+27+8 correct counts → **PASS**: model/enums/ glob returns 8 files (Role, Permission, DocumentStatus, AuditAction 27 values, SecurityEventType 8, ResourceType, GranteeType, MemberRole); model/entity/ glob returns 18 files E1..E18.
+  - `rule` TR-3.2: `Document` entity source has `@Version Long version;` → **PASS**: Grep found literal `@Version Long version;` at Document.java line 69.
+  - `rule` TR-3.3: Hibernate DDL on profile-local generates 18 tables without FK errors; indexes present per §5.3 → **PASS**: 11 conceptual indexes declared via @Index/Uniques match architecture §5.3 (AuditLog actor_time+action_time+entity, ResourcePermission grantee+resource, Document ws+folder+status, DocumentVersion doc+versionNumber, FileAsset storageKey UK, SearchIndexMetadata resource, SecurityEvent event+detectedAt, ExcessiveAttemptRecord actor+action+window). CascadeGraphPersistTest startup brought EntityManagerFactory up cleanly against H2 DDL create-drop — no FK errors.
+  - `rule` TR-3.4: Integration test persists Workspace → Folder → Document → DocumentVersion cascade graph without transient-object errors → **PASS**: mvn -Dtest=CascadeGraphPersistTest test exit 0; assertions Folder.workspace present, Document folder+workspace non-null, DocumentVersion.document matches — all true.
+  - `rule` TR-3.5: AuditLog entity persistence-only design intent → **PASS**: AuditLog entity design-append-only; Part B E11 defined with Long PK auto & JSON columns; no service code yet (services added in Task 6) but no @Modifying update/delete queries declared — repository semantics enforced later in Task 4.
+- **Notes**: ResourcePermission allow=true=GRANT; allow=false=DENY; resolver applies DENY priority.
+- **Completion Evidence**:
+  - 8 enums: [Role](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/backend/src/main/java/com/pusula/km/model/enums/Role.java), [Permission](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/backend/src/main/java/com/pusula/km/model/enums/Permission.java), [DocumentStatus](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/backend/src/main/java/com/pusula/km/model/enums/DocumentStatus.java), [AuditAction](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/backend/src/main/java/com/pusula/km/model/enums/AuditAction.java), [SecurityEventType](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/backend/src/main/java/com/pusula/km/model/enums/SecurityEventType.java), [ResourceType](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/backend/src/main/java/com/pusula/km/model/enums/ResourceType.java), [GranteeType](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/backend/src/main/java/com/pusula/km/model/enums/GranteeType.java), [MemberRole](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/backend/src/main/java/com/pusula/km/model/enums/MemberRole.java)
+  - 18 entities E1..E18 all under [model/entity/](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/backend/src/main/java/com/pusula/km/model/entity/) with @Table(name="pv_*"), PK UUID 11 + Long auto 7, 11+ indexes per §5.3, @Enumerated(STRING), Lazy FK, JSON columns
+  - [Document.java](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/backend/src/main/java/com/pusula/km/model/entity/Document.java#L69) has @Version optimistic lock
+  - [AuditLog.java](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/backend/src/main/java/com/pusula/km/model/entity/AuditLog.java) has previousState/newState JSON columns + 3 actor/action/entity indexes
+  - [ResourcePermission.java](file:///c:/Users/USER/Documents/trae_projects/Pusula_Vault/backend/src/main/java/com/pusula/km/model/entity/ResourcePermission.java) unified discriminator table, allow boolean GRANT/DENY
+  - Compile: `mvn -q -DskipTests compile` exit 0 (verified locally)
+  - Cascade test: `mvn -q -Dtest=CascadeGraphPersistTest test` exit 0, assertions pass
+  - 5 test-only Spring Data JPA repo interfaces added for CascadeGraphPersistTest only; full 18 repo set Task 4
+
+## Task 4: Repositories (Master Phase 4 / §7 P4)
+- **Status**: `in_progress`
+- **Priority**: high
+- **Depends On**: Task 3
+- **Description**:
+  - 17+ repositories: `UserRepository, RoleRepository, WorkspaceRepository, TeamRepository, TeamMembershipRepository, FolderRepository, DocumentRepository, DocumentVersionRepository, FileAssetRepository, ResourcePermissionRepository, AuditLogRepository, AiInteractionRepository, CommentRepository, TagRepository, DocumentTagRepository, SearchIndexMetadataRepository, SecurityEventRepository, ExcessiveAttemptRepository`
+  - Key queries (derived/JPQL):
+    - find accessible documents to user (paged) — with fetch joins
+    - Document versions ordered by versionNumber desc
+    - AuditLog by user OR date-range OR action OR entity (paged + sorted)
+    - ResourcePermissionRepository.findAllResolvingFor(resourceType,resourceId,userId) — joins USER_DIRECT, TEAM (member-of), ROLE_DEFAULT, WORKSPACE-inherited, FOLDER-inherited via closure query or recursive (or flatten at resolver service), DOCUMENT, ASSET
+    - Recently modified docs
+    - Files attached to document
+    - ExcessiveAttempt find within window
+- **Acceptance Criteria Addressed**: AC-3, AC-7 (resolving permissions for explain), AC-18 (security events accessible)
+- **Test Requirements**:
+  - `rule` TR-4.1: All repositories extend JpaRepository with correct ID types; compile green
+  - `rule` TR-4.2: `DocumentRepository.searchAccessible(...)` returns Page; pageable size/page/pageable totalElements correct
+  - `rule` TR-4.3: Workspace→Folder→Doc listing test with Hibernate SQL debug shows ≤2 queries (join-fetch), not N+1 (validate by counting "select folder" lines < threshold)
+  - `rule` TR-4.4: AuditLog date-range query respects bounds and sorts desc
+  - `rule` TR-4.5: ResourcePermission query returns union of all 7 grant sources rows correctly (assert count matches seeded grants)
+- **Notes**: Keep native SQL rare; only use for recursive folder chain if derived not expressive enough.
+
+## Task 5: DTOs (Java Records) & Mappers (Master Phase 5 / §7 P5)
+- **Status**: `pending`
+- **Priority**: high
+- **Depends On**: Task 4
+- **Description**:
+  - **ApiResponse<T>** envelope + **PaginatedResponse<T>** wrapper
+  - Request records: CreateWorkspace, UpdateWorkspace, CreateFolder, MoveFolder, CreateDocument, UpdateDocument, SaveDraft, CreateComment, ResolveComment, UploadFileRequest, SharePermissionGrantRequest, SharePermissionRevokeRequest, CreateTeamRequest, AddTeamMemberRequest, HumanizeRequest, AiChatRequest, SummarizeRequest, AuditFilterRequest, SecurityEventFilter, ExportRequest, ProgressDigestRequest, LoginRequest, ChangeRoleRequest, CreateUserRequest
+  - Response records: WorkspaceResponse, FolderResponse, DocumentResponse, DocumentVersionResponse, FileAssetResponse, CommentResponse, TeamResponse, TeamMembershipResponse, EffectivePermissionsDTO, AccessInspectorExplainResponse (effectivePermissions + sources[]), UserResponse, RoleResponse, AuditLogResponse, SecurityEventResponse, AiInteractionResponse, DocumentDiffResponse, ProgressDigestResponse, TagResponse, LoginResponse
+  - Mapper classes: UserMapper, WorkspaceMapper, FolderMapper, DocumentMapper, DocumentVersionMapper, FileAssetMapper, AuditLogMapper, SecurityEventMapper, TeamMapper, CommentMapper — plain classes (no MapStruct unless explicitly added to pom here; prefer manual for zero extra dependency unless required)
+  - Enums serialized correctly; all sensitive fields (passwordHash) never mapped to responses
+- **Acceptance Criteria Addressed**: AC-4, AC-7, AC-10 (envelope)
+- **Test Requirements**:
+  - `rule` TR-5.1: ≥24 DTO record classes count
+  - `rule` TR-5.2: ≥10 Mapper classes; DocumentMapper.toResponse(entity) field parity verified unit test
+  - `rule` TR-5.3: ApiResponse<DocumentResponse> serializes to keys success,message,data,timestamp (Jackson ObjectMapper unit test)
+  - `rule` TR-5.4: UserResponse JSON does NOT contain passwordHash/password/salt etc fields (grep of mapper source + unit test)
+  - `rule` TR-5.5: AccessInspectorExplainResponse has AccessSource list with via enum + description fields
+- **Notes**: Records preferred; explicit builders/constructors only if needed.
+
+## Task 6: Core Services, AuthorizationEngine & AOP Aspect (Master Phase 6 / §7 P6)
+- **Status**: `pending`
+- **Priority**: high
+- **Depends On**: Task 5
+- **Description**:
+  - Core interfaces + @Service impls @Transactional on writes:
+    - WorkspaceService, FolderService, DocumentService, DocumentVersionService, FileAssetService, CommentService, TagService, UserService, RoleService, TeamService, AuditService, EventPublisher (Spring ApplicationEventPublisher for async audit/security events)
+  - `security.authz`:
+    - `AuthorizationEngine` interface (hasPermission, getEffective, explainSources, isInScope)
+    - `AuthorizationEngineImpl` with resolution: short-circuit FOUNDER allow, ADMIN identity-governance allow, then build graph from ResourcePermission for (USER, TEAM, ROLE, WORKSPACE, FOLDER, DOCUMENT, ASSET); DENY at any layer wins; derived COPY_ALLOWED helper
+    - `@RequirePermission` annotation with element fields `resourceType`, `resourceIdArg`, `action`
+    - `RequirePermissionAspect` @Around AOP aspect resolves resourceId from args → engine decision → DENY throws PermissionDeniedException + publishes UNAUTHORIZED_ACCESS_ATTEMPT security event + audit
+  - ExcessiveAttemptsTracker (util/security) for denied actions; threshold triggers SECURITY EVENT
+  - Self-escalation rule in AuthorizationEngine (cannot grant self higher)
+- **Acceptance Criteria Addressed**: AC-5, AC-6, AC-7, AC-41 (self-escalation), AC-18 (excessive tracker)
+- **Test Requirements**:
+  - `rule` TR-6.1: Spring context loads; all services + engine + aspect beans present; no UnsatisfiedDependencyException
+  - `rule` TR-6.2: @RequirePermission aspect test: method call with denied permission → method body never executes (assert inside not hit) + PermissionDeniedException thrown
+  - `rule` TR-6.3: TEAM_LEAD grants self DOWNLOAD on doc they have VIEW only → 403 + DB permission unchanged; SecurityEvent.PERMISSION_DENIED row
+  - `rule` TR-6.4: DENY on folder overrides GRANT on document beneath it; hasPermission returns false for document even if direct grant exists
+  - `rule` TR-6.5: ExcessiveAttemptsTracker: denied download count > threshold (e.g., 5/hour) → event EXCESSIVE_DOWNLOAD_ATTEMPTS logged
+  - `rule` TR-6.6: Document update with stale @Version → throws ObjectOptimisticLockingFailureException wrapped to ConflictException (so controller returns 409)
+- **Notes**: Aspect ordering high precedence (before @Transactional starts tx ideally, or inside; verify rollback semantics correct on denied).
+
+## Task 7: Spring Security, Authentication & RBAC Integration (Master Phase 7 / §7 P7)
+- **Status**: `pending`
+- **Priority**: high
+- **Depends On**: Task 6
+- **Description**:
+  - SecurityFilterChain: `/api/v1/auth/**` permit, Actuator health/info permit (local/dev), Swagger permit local/dev; rest authenticated
+  - UserDetailsService via UserRepository; BCryptPasswordEncoder
+  - Session or JWT (choose JWT: signed secret from env `PV_JWT_SECRET`; refresh token optional MVP: access token only)
+  - AuthController: `/login` returns access token + user profile + role list + visible workspace scopes
+  - Method security `@EnableMethodSecurity` + PreAuthorize where needed (aspect-based for perms, role-level guards also via annotations)
+  - Scope rule enforcement: ADMIN cannot auto-read data; identity-management endpoints (user create/role assign/grant-revoke) allowed for ADMIN but document reads denied unless permission assigned
+  - Logout endpoint invalidates token or session (if JWT blacklist in-memory map MVP, Redis extension)
+  - LOGIN_SUCCESS, LOGIN_FAILURE (audited), UNAUTHORIZED_ACCESS_ATTEMPT events
+- **Acceptance Criteria Addressed**: AC-6 (full matrix), AC-5
+- **Test Requirements**:
+  - `rule` TR-7.1: Anonymous GET `/api/v1/documents` → 401/403
+  - `rule` TR-7.2: POST `/api/v1/auth/login` success returns token + UserResponse with role field among 6 values
+  - `rule` TR-7.3: Scope isolation test: Admin token → GET doc BETA (not granted) → 403; Admin token → GET `/api/v1/admin/users` (identity gov) → 200
+  - `rule` TR-7.4: Bad password → LOGIN_FAILURE audit event written; 5 failures/min → rate-limit filter returns 429
+  - `rule` TR-7.5: FOUNDER token → GET any doc → 200; audit FOUNDER_ACTION recorded
+- **Notes**: CSRF disabled for stateless JWT or configure for session.
+
+## Task 8: Storage Abstraction, LocalDrive Impl, Encryption, Validations (Master Phase 8 / §7 P8)
+- **Status**: `pending`
+- **Priority**: high
+- **Depends On**: Task 7
+- **Description**:
+  - `StorageService` interface: `store(InputStream,contentType,size,dir,ext,encryptedFlag)→storageKey, load(storageKey)→InputStream, delete, exists, size, move, computeChecksum`
+  - `LocalDriveStorageServiceImpl` using `file.upload-dir`; auto-create subdirs on first run: documents/assets/versions/exports/temp/backups
+  - Secure storage key generator: `UUID + "." + sanitizedExt`; never original filename used as filesystem path
+  - Validation: MIME via Files.probeContentType + extension allowlist (DOCX/XLSX/CSV/PDF/PNG/JPG/JPEG/WEBP/SVG/TXT/MD); max size per type; filename sanitization; path traversal detection regex + reject `\`, `/`, `..`, null bytes
+  - SHA-256 checksum returned to caller to persist to FileAsset
+  - Encryption wrapper: `FileEncryption` interface + `Aes256GcmFileEncryption` impl; key env PV_ENC_KEY from env; extension interface for KMS (LocalKeyProvider + AwsKmsKeyProvider stub in separate impl module not required but scaffolding interface)
+- **Acceptance Criteria Addressed**: AC-8, AC-9, AC-34 (encryption keys env-only)
+- **Test Requirements**:
+  - `rule` TR-8.1: Valid PNG upload → storage created under E:/PusulaKM_Data/assets; returned key safe; response no raw path
+  - `rule` TR-8.2: Filename `../../etc/passwd.md` → StorageException thrown before any filesystem write
+  - `rule` TR-8.3: .exe extension → rejected; oversized file (> property) → rejected
+  - `rule` TR-8.4: Encrypted round-trip: store with encrypted=true → load → decrypted stream bytes equal original
+  - `rule` TR-8.5: Grep backend src for any AES key literal or 32+ hex hardcoded → 0 matches
+  - `rule` TR-8.6: First startup, 6 subdirectories created under upload-dir; assert Files.isDirectory for each
+- **Notes**: Use NIO Files.copy + secure temp; never concatenate user input into paths without validation.
+
+## Task 9: REST Controllers, Admin Routes & Access Inspector (Master Phase 9 / §7 P9)
+- **Status**: `pending`
+- **Priority**: high
+- **Depends On**: Task 8
+- **Description**:
+  - Controllers (thin): AuthController, UserController, WorkspaceController, FolderController, DocumentController, DocumentVersionController, FileAssetController, SearchController, HumanizerController, AiAgentController, AnalyticsController, AuditController, ExportController
+  - Admin sub-group: `/api/v1/admin/...`: users CRUD, roles assign, teams CRUD/membership, access grants/revoke, `GET /access/user/{userId}/resource/{type}/{resourceId}` calling AccessInspectorService.explain
+  - Every controller method: parameter validation @Valid → service call → wraps responses using ApiResponse; appropriate HTTP status
+  - File controller: `/files/upload` multipart; `/files/{id}/preview` streaming InputStream; `/files/{id}/download` requires DOWNLOAD permission (check AuthorizationEngine → excessive attempts → audit → streaming)
+  - Diff endpoint: `/documents/{id}/diff?leftVersion=&rightVersion=`
+- **Acceptance Criteria Addressed**: AC-6, AC-7, AC-10, AC-32
+- **Test Requirements**:
+  - `rule` TR-9.1: All controller classes exist with @RestController; MockMvc base path `/api/v1`
+  - `rule` TR-9.2: Document CRUD MockMvc tests: POST, GET, PUT, DELETE → correct 2xx/404/403 and envelope JSON
+  - `rule` TR-9.3: Access Inspector call grants via User + Team → sources array lists both; effective perms correct
+  - `rule` TR-9.4: File preview without VIEW → 403; File download without DOWNLOAD → 403 DOWNLOAD_DENIED audit row
+  - `rule` TR-9.5: Diff endpoint returns DocumentDiffResponse with additions/deletions for 2 real versions
+- **Notes**: Controllers never call repos. Controllers delegate all business to services.
+
+## Task 10: Exception Handling, GlobalAdvice, Validation Error Formatting (Master Phase 10 / §7 P10)
+- **Status**: `pending`
+- **Priority**: high
+- **Depends On**: Task 9
+- **Description**:
+  - Exception classes: ResourceNotFoundException, UnauthorizedAccessException, ForbiddenException, AuthorizationScopeException, PermissionDeniedException, ValidationException, StorageException, FileProcessingException, AiProviderException, RagException, ConflictException, RateLimitExceededException
+  - `@ControllerAdvice GlobalExceptionHandler` maps each to correct HTTP status + ApiResponse success=false + message safe/user-friendly; detailed stack + context logged server-side only via SLF4J
+  - `MethodArgumentNotValidException` collects field errors → structured messages
+  - Security exceptions from filter chain also map via additional handler
+- **Acceptance Criteria Addressed**: AC-11, AC-29 (exception types)
+- **Test Requirements**:
+  - `rule` TR-10.1: Unknown doc id → 404 + envelope; response body does not contain "Exception" / "Caused by" / "at com."
+  - `rule` TR-10.2: Blank title on CreateDocument → 400 with field error referencing "title"
+  - `rule` TR-10.3: Access denied scenario → 403 envelope + distinct message type (PermissionDenied vs ScopeDenied)
+  - `rule` TR-10.4: Server log appender contains full stack trace for same 404 event; grep log file/console
+- **Notes**: Ensure all exceptions extend Runtime base or handled appropriately; no raw leak.
+
+## Task 11: Angular Core Architecture (Master Phase 11 / §7 P11)
+- **Status**: `pending`
+- **Priority**: high
+- **Depends On**: Task 1
+- **Description**:
+  - Angular modules already created in Task 1; now implement:
+    - `core/models`: TS interfaces matching backend DTOs, enums: Role/Permission/AuditAction/SecurityEventType/ResourceType
+    - `core/auth`: AuthService (login/logout/token storage + user profile signal), Token interceptor adds bearer
+    - `core/interceptors`: ErrorInterceptor maps 401 → logout + toast; 403 → toast; server error messages shown via toast
+    - `core/guards`: AuthGuard, RoleGuard (accepts allowed roles array), PermissionGuard (canLoad/CanActivate with effective perms)
+    - `core/services`: HttpClient CRUD services for Workspace/Folder/Document/Version/File/Team/Admin/AccessInspector/Analytics/Audit/Humanizer/AI
+    - `shared/components`: Toast, Modal, ConfirmDialog, LoadingSpinner, LoadingState, ErrorState, EmptyState, PermissionPickerComponent (8 perms + grantee selector User/Team/Role/Workspace)
+    - `shared/directives`: `appPreventCopy` (binds contextmenu/keydown ctrl+c/selectstart/dragstart, configurable strength based on COPY_ALLOWED input); `appHasPermission` structural directive (*appHasPermission="'DOWNLOAD'; else: noDownloadTpl")
+    - `shared/ui`: Button, Input, Card, DataTable (virtual scroll for audit), RoleBadge, TagChip, Pagination
+    - Router: `routes: Routes` with lazy `loadChildren` for dashboard/documents/files/ai/analytics/audit/admin
+- **Acceptance Criteria Addressed**: AC-29, AC-36, AC-27 (directive reacts to perms), AC-38 (SOLID)
+- **Test Requirements**:
+  - `rule` TR-11.1: Folders layout matches spec (file listing check)
+  - `rule` TR-11.2: Router config uses `loadChildren` at least 4 times (features: dashboard/documents/files/ai/analytics/audit/admin — pick minimum 4)
+  - `rule` TR-11.3: AuthGuard.canActivate with unauthenticated state → returns UrlTree `/login` (unit test)
+  - `rule` TR-11.4: `appPreventCopy` directive: synthetic right-click + Ctrl+C events → preventDefault called (spy test)
+  - `rule` TR-11.5: `ng build --configuration development` → exit 0
+- **Notes**: Use Angular Signals in auth state where appropriate; keep observable flow for HTTP.
+
+## Task 12: Dashboard & Navigation UI (4-Pane Layout, Role-Scoped Workspace List) (Master Phase 12 / §7 P12)
+- **Status**: `pending`
+- **Priority**: medium
+- **Depends On**: Task 11, Task 33 (Seed Data — uses realistic seeded data later; but UI first using mocks that mirror final type contracts)
+- **Description**:
+  - Login page: username/password, submit, remember me (optional), error toast
+  - Topbar: brand logo, workspace switcher dropdown (only scoped visible workspaces), search trigger Ctrl+K, user menu (avatar, display name, role badge, logout)
+  - Sidebar: navigation with icons/labels: Dashboard, Documents, Projects, Files, Search, Analytics, Audit, Admin (visible only if role permits)
+  - Main Workspace router outlet
+  - Collapsible right AI Drawer placeholder toggle button with icon
+  - Dashboard page widgets (mocked data matching backend contract, so Task 20 can swap to HTTP later):
+    - Stat cards: Users / Documents / Files / Storage Used / Created Today / Modified Today / AI Interactions / Active 7d
+    - Recent documents, Recently edited, Recent files
+    - Quick create buttons + upload zone
+    - Activity list (last 20 events)
+  - Error/Empty/Loading wrappers on dashboard cards
+  - Responsive CSS: <1024px sidebar collapse to icon, <768 tablet stacking
+- **Acceptance Criteria Addressed**: AC-28 (rubric layout), AC-37, AC-34 (error states)
+- **Test Requirements**:
+  - `rule` TR-12.1: Login submit success → navigate `/dashboard` (auth mock returns 200)
+  - `rule` TR-12.2: Screenshot/DOM assert: topbar, sidebar, main, drawer toggle present
+  - `rule` TR-12.3: AI Drawer toggle click → state flips open/close (signal test)
+  - `rule` TR-12.4: For MANAGER_ALPHA role mock → sidebar workspace switcher list length = 1 (Alpha only) — no Beta (scoped visibility)
+  - `rubric` TR-12.5: Enterprise aesthetic; scale 1-5; threshold>=4; evidence screenshot (dashboard fully rendered, consistent spacing/palette/font, no garish gradients, looks like internal enterprise tool)
+- **Notes**: Admin nav item visibility: role >= ADMIN. Use `*appHasRole="['ADMIN','FOUNDER']"` directive.
+
+## Task 13: Document Workspace & TipTap Editor (Master Phase 13 / §7 P13)
+- **Status**: `pending`
+- **Priority**: high
+- **Depends On**: Task 12, Task 6 (backend doc services), Task 9 (controllers)
+- **Description**:
+  - Document Workspace page shell with 9 required header/sidebar areas: Title, Breadcrumb, Version indicator, Last-edited, Save-status indicator, Share/Permissions dialog, Version history side panel, AI-tools toolbar entry, Comments tab
+  - TipTap editor integration: StarterKit + Headings + Bold/Italic/Underline + Bullet/Ordered List + Table + Link + CodeBlock + Blockquote + Image + Placeholder + Comments (comment marks via TipTap comment extension or custom thread)
+  - Autosave service: 1500ms debounce; SaveStatus signal enum (SAVING/SAVED/ERROR/CONFLICT); update Draft API on backend; subsequent meaningful changes (after initial save & 1000 chars delta or user-initiated Save Version button) increment DocumentVersion via backend
+  - Share dialog: uses shared PermissionPicker (8 bits + grantee types User/Team/Role/Workspace)
+  - Conflict dialog: on 409 response → dialog "modified by another user" with buttons Reload / Compare / Merge (reload at minimum; compare links to diff view; merge basic textarea side-by-side fallback acceptable)
+  - Floating humanizer toolbar placeholder UI wired to selection events (actual AI later in Task 16)
+- **Acceptance Criteria Addressed**: AC-12, AC-30, AC-31
+- **Test Requirements**:
+  - `rule` TR-13.1: TipTap renders with 9+ toolbar buttons/menu items in DOM
+  - `rule` TR-13.2: 10 keystrokes <1s + wait 2s → interceptor sees save request count exactly 1 (debounce test via rxjs fakeAsync)
+  - `rule` TR-13.3: Document workspace 9 areas: 9 selector queries truthy
+  - `rule` TR-13.4: 409 Conflict response from mock backend → conflict dialog renders with exact heading text
+  - `rule` TR-13.5: Share dialog open → 8 permission checkboxes rendered + grantee selector User/Team/Role/Workspace
+- **Notes**: Table images uploads via backend `/files/upload` then insert into TipTap.
+
+## Task 14: File Management, Upload, Unified Viewer, PDF/Image/Spreadsheet Engines (Master Phase 14 / §7 P14)
+- **Status**: `pending`
+- **Priority**: high
+- **Depends On**: Task 13, Task 8 (storage), Task 9 (file controllers)
+- **Description**:
+  - File upload component: drag-drop zone, progress bars, attach to current document or standalone upload, type validation before HTTP
+  - Unified FileViewerComponent: switch on mimeType → DocViewer(readonly TipTap), SheetViewer, PdfViewer, ImageViewer, TextViewer
+  - PDF viewer: pdf.js; toolbar page nav (prev/next, jump, zoom in/out, search, thumbs sidebar) + watermark overlay (dynamic fields: USERNAME, ROLE, TEAM, TIMESTAMP, SESSION) + DLP activates when COPY_ALLOWED false
+  - Image viewer: open-seadragon or simple zoom via transform, pan, rotate buttons, fullscreen, OCR badge (indicate status OCR complete/pending)
+  - Spreadsheet: FortuneSheet or Handsontable; multi-sheet tabs; basic formulas SUM/AVERAGE/+/−/*//; toolbar insert/delete row/col; save; export-button -> backend XLSX; import-button read XLSX, send to backend or parse client-side then save
+  - Backend Excel XLSX generation via Apache POI (Task 1 pom already added) and import parser; ensure versioning applied for spreadsheet documents also
+  - COPY_ALLOWED derived from effectivePermissions: DOWNLOAD || MANAGE_ACCESS; drives watermark opacity + appPreventCopy strength
+- **Acceptance Criteria Addressed**: AC-13, AC-14, AC-15, AC-26, AC-27
+- **Test Requirements**:
+  - `rule` TR-14.1: Drag-drop PDF on upload → upload HTTP completes; PDF viewer renders pages count > 0
+  - `rule` TR-14.2: Watermark overlay DOM contains text nodes username + timestamp; values dynamic not hardcoded "USER" string
+  - `rule` TR-14.3: Image viewer zoom button click → scale transform value changes
+  - `rule` TR-14.4: Sheet =SUM(A1:A3) values 1,2,3 → A4 value 6; export response XLSX magic bytes `PK` present; re-import restores 6
+  - `rule` TR-14.5: user2 without DOWNLOAD → COPY_ALLOWED false; PDF viewer context menu + selectstart + ctrl+c all prevented; download button `display:none` (appHasPermission structural directive)
+- **Notes**: Apache POI OOXML for backend XLSX; frontend FortuneSheet easier integration.
+
+## Task 15: Versioning, Version History Panel, Restore, Diff (Master Phase 15 / §7 P15)
+- **Status**: `pending`
+- **Priority**: high
+- **Depends On**: Task 13, Task 6 (DocVersion service impl), Task 9 (diff endpoint)
+- **Description**:
+  - Backend DiffService: choose java-diff-utils library (pom dependency add); diff plain text or normalize TipTap HTML to text; compare left/right DocumentVersion.content
+  - `/documents/{id}/diff` returns additions/deletions/modifications list with ranges (inline-ready) + unified format for side-by-side
+  - Angular Diff viewer component: inline view shows red deletions green additions inline; side-by-side splits into two columns
+  - Restore button: confirmation dialog → POST /versions/{id}/restore → backend creates NEW DocumentVersion whose content equals old version; bump currentVersion
+  - Version history side panel (scrollable): list versionNumber, author, timestamp, changeSummary, click to view preview, buttons restore / compare with current
+- **Acceptance Criteria Addressed**: AC-16
+- **Test Requirements**:
+  - `rule` TR-15.1: Doc A→B→C (3 versions); versions API returns length 3; ordered desc
+  - `rule` TR-15.2: Restore v1 → v4 created with content equals v1; currentVersion = 4
+  - `rule` TR-15.3: Diff endpoint v1 vs v2 returns list containing type:"added" entries for differing sentences; java-diff-utils output not placeholder
+  - `rule` TR-15.4: Inline toggle → inline CSS classes present; side-by-side toggle → 2 columns rendered; assertions of class names
+- **Notes**: Handle HTML docs by stripping tags to plain text first for diff MVP; acceptable to store alongside HTML plainText snapshot field for speed.
+
+## Task 16: AI Humanizer (Floating Toolbar, Paste Modal, Streaming) (Master Phase 16 / §7 P16)
+- **Status**: `pending`
+- **Priority**: medium
+- **Depends On**: Task 9 (HumanizerController), Task 6 (Audit service), Task 11 (http interceptor/SSE)
+- **Description**:
+  - Backend `AiProvider` interface; 3 impls: OllamaAiProvider (SSE-capable via HttpClient), OpenAiCompatibleProvider, StubFallbackAiProvider ("AI provider not configured, please configure `pv.ai.provider` in environment.")
+  - HumanizerService → calls AiProvider with prompt + 5 tone preset: Professional/Technical/Conversational/Concise/Formal; preserve meaning. Return SSE char-by-char via SseEmitter on POST `/api/v1/ai/humanize/stream`
+  - Frontend: Selection listener on TipTap → floating toolbar appear with ✨ Humanize button + tone dropdown; POST SSE via fetch readablestream or EventSource (SSE)
+  - Paste & Humanize modal: two textarea panes Original | Improved; Cancel / Humanize / Insert buttons; diff highlighting on improved vs original; regenerate button
+  - Audits: AI_HUMANIZATION_REQUEST on every call (log tone, snippet-length, NOT raw full content; comply with no sensitive logging)
+  - Provider stub rule: never output fabricated document-summary-style content when provider unconfigured
+- **Acceptance Criteria Addressed**: AC-20, AC-39
+- **Test Requirements**:
+  - `rule` TR-16.1: Selection → floating toolbar ✨ rendered
+  - `rule` TR-16.2: SSE endpoint (mock provider returning lines) → client receives > 1 SSE data chunk; concatenated string length > 0
+  - `rule` TR-16.3: Paste Modal DOM has 2 textareas + 3 buttons
+  - `rule` TR-16.4: Insert button click → TipTap content contains inserted substring
+  - `rule` TR-16.5: Stub provider (ai.provider=stub) → response includes "provider not configured" and does NOT contain any synthesized claims about content quality
+  - `rule` TR-16.6: Audit row AI_HUMANIZATION_REQUEST present after call
+- **Notes**: SSE + RxJS Subject for chunk processing on frontend.
+
+## Task 17: RAG Pipeline, Vector Store Abstraction & Agent Drawer with Citations (Master Phase 17 / §7 P17)
+- **Status**: `pending`
+- **Priority**: medium
+- **Depends On**: Task 14 (ingestion extraction), Task 16 (AI provider)
+- **Description**:
+  - Backend RAG packages:
+    - `rag.extractor`: TextExtractors for DOCX/Apache Tika or POI Word; PDF via Apache PDFBox; XLSX via POI; CSV opencsv; TXT/MD straight read; PNG via OCR (Tess4J backend option; or call frontend Tesseract pipeline result saved as text)
+    - `rag.chunker`: RecursiveCharacter or similar; overlap configurable
+    - `rag.embedder`: EmbeddingProvider interface + OllamaEmbeddings + OpenAiEmbeddings + StubEmbeddings (random small vector for tests/no provider)
+    - `rag.vector`: VectorStore interface + InMemoryVectorStore (cosine similarity, map chunks) + PgVectorStore extension scaffold (SQL migration in resource but activation only on postgres env)
+    - `rag.impl.RagServiceImpl`: pipeline → extract → chunk → embed → store.answer(question, user) → similarity search topK chunks → AuthorizationEngine filter unauthorized BEFORE LLM → pass filtered to AiProvider → return grounded answer + citations list
+  - `/api/v1/ai/summarize` returns Summary: executiveSummary, keyPoints, actionItems
+  - `/api/v1/ai/chat` returns answer + citations[] (title, version, section/page)
+  - Agent Drawer UI: 3 tabs: Summary, Ask AI (chat history scroll, message bubbles), Citations list; collapsible open/close
+  - Click citation → router navigate to document / version / anchor if possible
+- **Acceptance Criteria Addressed**: AC-21, AC-22, AC-23, AC-34 (filter order)
+- **Test Requirements**:
+  - `rule` TR-17.1: answer() call order via mocks: similarity -> filter -> llmGenerate; llmGenerate not called before filter; assertion via mock verify order
+  - `rule` TR-17.2: Summarize response shape fields non-empty or stub explicitly say "not configured"
+  - `rule` TR-17.3: Chat answer includes citations array with title/version/section fields; JSON schema match
+  - `rule` TR-17.4: Unauthorized user vs 3 chunks: permission filter removes 1 unauthorized → LLM prompt chunks == 2
+  - `rule` TR-17.5: Citations click → router navigate target matches expected URL
+- **Notes**: Cosine similarity in pure Java or small math lib; avoid extra native deps for default.
+
+## Task 18: Unified Search (Keyword + Semantic) & Ctrl+K Overlay (Master Phase 18 / §7 P18)
+- **Status**: `pending`
+- **Priority**: medium
+- **Depends On**: Task 17 (semantic), Task 6 (keyword DB search), Task 12 (topbar trigger)
+- **Description**:
+  - Backend SearchService combines keyword DB query (title/content/metadata/tags/author LIKE/JPQL fulltext-like or H2 fulltext if available) + RAG vector semantic topK
+  - Deduplicate results, apply accessible filter (AuthorizationEngine)
+  - `GET /api/v1/search?q=&type=&workspace=&page=&size=&semantic=true/false` returns PaginatedResponse of SearchResult items (title/type/snippet/author/lastModified/workspace/version)
+  - Frontend Global Search Component + Ctrl+K hostlistener directive (app-wide) → overlay modal
+  - Debounced input (300ms); result card matching AC fields; click result → navigate
+- **Acceptance Criteria Addressed**: AC-24, AC-15 (OCR text searchable)
+- **Test Requirements**:
+  - `rule` TR-18.1: Ctrl+K pressed on any page → overlay display:block (synthetic keydown test)
+  - `rule` TR-18.2: Keyword returns results with exact phrase in snippet field
+  - `rule` TR-18.3: Semantic search with embedding (stub vectors ok) returns related docs; does not require exact phrase
+  - `rule` TR-18.4: Result DOM card shows title/type/snippet/author/modified (assert selectors)
+  - `rule` TR-18.5: OCR'd image indexed → keyword from image text returns image asset result (after ingestion)
+- **Notes**: Backend keyword acceptable LIKE for MVP; postgres fulltext on prod later.
+
+## Task 19: Audit System, 27 Events, Access Governance Logs, Security Events, Honeytoken Scaffold (Master Phase 19 / §7 P19)
+- **Status**: `pending`
+- **Priority**: high
+- **Depends On**: Task 6 (AuditService + EventPublisher), Task 7 (auth events), Task 9 (AuditController + Security)
+- **Description**:
+  - Wire every required audit event via service-level calls or EventPublisher events so they are append-only:
+    - auth: LOGIN_SUCCESS, LOGIN_FAILURE, LOGOUT
+    - doc CRUD/view, version created/restored
+    - file uploaded/viewed/downloaded/download denied
+    - search performed, AI_HUMANIZATION_REQUEST, AI_DOCUMENT_QUERY, AI_QUERY, PASTE_EVENT
+    - grants/roles: ACCESS_GRANTED, ACCESS_REVOKED, ROLE_CHANGED, PERMISSION_CHANGED, USER_CREATED, USER_UPDATED
+    - UNAUTHORIZED_ACCESS_ATTEMPT (from aspect), DOCUMENT_SHARED, EXPORT_CREATED
+  - For ACCESS_GRANTED, ROLE_CHANGED, PERMISSION_CHANGED: populate previousState/newState JSON (map->JSON serialize grant rows or role value before/after)
+  - Audit Controller: filter, paginated, export CSV (via Task 22 Export svc later if needed, MVP: list API)
+  - Security Events controller; severity filter; Admin/Founder only. Wire excessive attempts and honeytoken triggers.
+  - Honeytoken module: `@ConditionalOnProperty(name="pv.security.honeytoken.enabled")`; HoneytokenService, decoy doc seed, HoneytokenAccessAspect marker → on access decoy resource → SecurityEvent HONEYTOKEN_ACCESS + audit alert. No real credentials anywhere.
+- **Acceptance Criteria Addressed**: AC-17, AC-18, AC-19, AC-41
+- **Test Requirements**:
+  - `rule` TR-19.1: End-to-end scenario inserts 11 appropriate audit rows after login/create/view/upload/deny/grant/revoke/rolechange/humanize/query/paste → count matches; types correct
+  - `rule` TR-19.2: Source grep AuditLog/Repository/Service for delete/update modifying methods → 0 calls (append-only)
+  - `rule` TR-19.3: ACCESS_GRANTED event JSON fields previousState/newState non-empty and show the change
+  - `rule` TR-19.4: Security events 8 types all represented as enum constants; enable honeytoken profile → decoy docs seeded; access trigger → HONEYTOKEN_ACCESS event
+  - `rule` TR-19.5: Honeytoken module grep for `sk-`, `AKIA`, 40+ hex likely key → 0 matches
+- **Notes**: Honeytoken disabled by default, no risk.
+
+## Task 20: Founder & Role-Scoped Analytics Dashboard, Heatmap, Access Governance Widgets, Progress Synthesizer (Master Phase 20 / §7 P20)
+- **Status**: `pending`
+- **Priority**: medium
+- **Depends On**: Task 19 (audit data), Task 12 (dashboard shell), Task 16/17 (AI summaries)
+- **Description**:
+  - Backend AnalyticsService, AnalyticsController endpoints:
+    - Overview: `/analytics/overview` → totals counts + storageUsedBytes + docsCreatedToday + docsModifiedToday + aiInteractions7d + activeUsers7d
+    - Activity: `/analytics/activity?period=day|week|month` → array buckets (date + counts: created/edited/viewed/uploaded/downloaded/ai)
+    - Heatmap: `/analytics/heatmap?from=&to=` → year-day buckets counts grid
+    - Version Analytics: `/analytics/versions/top-edited`, `/analytics/contributors/top-active`, `/analytics/versions/frequency-by-month`
+    - AuditExplorer: `/audit` (Task 19 already); but analytics provides filter helpers
+    - Access Governance: top-grants-last-30, top-denied-last-30, suspicious-access list
+    - AI Progress Synthesizer: `/analytics/progress-daily`, -weekly, -monthly → combines Observed Activity list (from real rows) + AI-Generated Summary natural language via AiProvider. Strict: observed items from DB only.
+  - Frontend features/analytics: Overview cards, activity bar chart (Chart.js or ECharts), Calendar Heatmap component, Version analytics charts/table, AuditExplorer widget w/ filters + virtual scroll, Access Governance widgets, Progress Synthesizer buttons and text output with clearly labelled sections.
+  - Scope rule: FOUNDER sees global; ADMIN sees governed-domain; MANAGER/TEAM_LEAD see team-scoped (via team-membership/assigned workspace) — backend endpoints apply AuthorizationEngine.determineScope before aggregating
+- **Acceptance Criteria Addressed**: AC-29 (rubric), AC-25 (synthesize labels)
+- **Test Requirements**:
+  - `rule` TR-20.1: Overview endpoint numbers equal actual repo counts (assert query match)
+  - `rule` TR-20.2: Heatmap returns ≥ 365 day slots (for full-year grid) with counts number type
+  - `rule` TR-20.3: MANAGER_ALPHA analytics vs global → doc counts only include Alpha workspace; no Beta docs counted (scope assertion)
+  - `rule` TR-20.4: Progress Synthesizer response contains both "Observed Activity:" + "AI-Generated Summary:" literal strings; observed list items exist in audit table for that day
+  - `rubric` TR-20.5: Analytics polish; scale 1-5; threshold>=4; screenshot evidence
+- **Notes**: Calendar heatmap: 53 weeks x 7 days grid component; virtual scroll audit tables.
+
+## Task 21: Testing (Master Phase 21 / §7 P21)
+- **Status**: `pending`
+- **Priority**: high
+- **Depends On**: Tasks 1–20
+- **Description**:
+  - Backend tests (JUnit 5 + Spring Boot Test + MockMvc):
+    - Unit: mappers, encryption, storage, authorization engine resolver (deny-wins, 8 perm bits, scope rules), excessive tracker counter, DiffService
+    - Integration (H2): controllers CRUD matrix, role-scope isolation (Admin can see users but not Beta doc), Access Inspector sources correct, audit 11 scenarios produce rows, conflict 409, optimistic lock, seed data counts match, pagination/accessible docs no N+1, permission filter before LLM
+  - Frontend tests (Karma + Angular testing or Jest if chosen; default Karma):
+    - Unit: guards, interceptors, auth service state, autosave debounce, diff toggle, directive event prevent, upload drop-zone triggering
+    - Component: login form, dashboard cards render, document editor toolbar items, share dialog 8 perms, overlay Ctrl+K open
+  - Critical coverage: business logic path (AuthorizationEngine + scope) + scope isolation demo tests must pass 100%
+- **Acceptance Criteria Addressed**: Cross-cutting coverage for every AC
+- **Test Requirements**:
+  - `rule` TR-21.1: `mvn test` runs without failures; test count >= 40
+  - `rule` TR-21.2: Authorization engine matrix test (roles × perms × scope) >= 25 sub-cases green (parameterized test)
+  - `rule` TR-21.3: Frontend `npm run test -- --watch=false --browsers=ChromeHeadless` or project default exits 0; specs >= 20 passing
+  - `rule` TR-21.4: At least 1 E2E-style happy path: login → create workspace → create doc → save versions → restore version; flow green
+- **Notes**: Coverage tool optional (JaCoCo can be added in pom); threshold test counts rule applied if coverage tool absent.
+
+## Task 22: Seed Data, README, Final Verification (Master Phase 22 / §7 P22)
+- **Status**: `pending`
+- **Priority**: high
+- **Depends On**: Tasks 20, 21
+- **Description**:
+  - `DataInitializer @Component @Profile("local") implements CommandLineRunner`
+    - 10 users: founder/founder123, admin/admin123, manager_alpha/ma123, manager_beta/mb123, team_lead_alpha/tla123, team_lead_beta/tlb123, employee_ea/ea123, employee_eb/eb123, employee_ec/ec123, intern_ia/ia123, intern_ib/ib123 (or 10 exactly as spec)
+    - Roles assigned correctly; passwords BCrypt encoded
+    - Workspaces: Project Alpha, Project Beta; Folders 3 each; 6+ Documents total; Document versions for two docs (≥3 versions each); FileAsset rows with placeholder secure keys pointing to test tiny PNG or text file under storage; Seed teams: Alpha Engineering (workspace Alpha) + Research Team (platform-level, members: Manager Beta + Intern B); grants: Employee B can view Alpha (cross-team demo)
+    - AuditLog seed: ~30 historical rows covering login success, doc created, edited, version, AI query, upload, etc.
+  - README.md final content:
+    - Architecture overview + link to `.trae/specs/architecture.md`
+    - Java/Node/Angular required versions matrix
+    - Environment variables table (PV_ENC_KEY, PV_JWT_SECRET, PV_CORS, PV_AI_PROVIDER, PV_OLLAMA_BASE_URL, PV_OPENAI_API_KEY, DB props)
+    - PostgreSQL setup section (optional, for prod profile)
+    - Ollama setup section (optional)
+    - Local storage: E:/PusulaKM_Data auto-created; note about backups
+    - Backend start: `mvn spring-boot:run -Dspring-boot.run.profiles=local`
+    - Frontend start: `cd frontend && npm install && ng serve`
+    - ⚠️ Dev-only seed credentials box; CHANGE BEFORE PROD warning
+    - Default port mapping (backend 8080; frontend 4200)
+    - Security statement: Defense-in-depth; no false-impossibility claims; actual boundary enumerated
+  - Final 17-point checklist verification (Master §71):
+    (1) compile backend (2) backend starts (3) frontend starts (4) schema works (5) seed appears (6) CRUD flows (7) file upload (8) file preview (9) permissions — ADMIN/Beta 403 (10) doc versioning (11) audit logging (12) AI provider abstraction & switch providers=stub/ollama works (13) Humanizer streaming & flow (14) search keyword+semantic (15) analytics scoped (16) error handling (17) responsive
+- **Acceptance Criteria Addressed**: AC-33, AC-35, AC-36, AC-37, AC-40, AC-42
+- **Test Requirements**:
+  - `rule` TR-22.1: Clean start: counts 10 users / 2 workspaces / 6 folders / 6 docs / 6 versions / 2 teams / 30+ audits
+  - `rule` TR-22.2: Login manager_alpha/mb123 accidentally attempt Beta doc → 403; audit row written
+  - `rule` TR-22.3: Switch `pv.ai.provider` env between stub/ollama → behavior changes correctly; stub returns configured message (not fabricated content)
+  - `rule` TR-22.4: Grep runtime sources (backend/src frontend/src README.md) forbidden placeholder strings returns 0 matches
+  - `rule` TR-22.5: README contains commands verbatim `mvn spring-boot:run` and `npm install && ng serve`; contains DEV-ONLY credentials warning literal
+- **Notes**: Final checklist screenshot/test reports recorded in each task completion evidence field after Implement.

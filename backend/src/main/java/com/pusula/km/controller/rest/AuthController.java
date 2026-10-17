@@ -1,0 +1,153 @@
+package com.pusula.km.controller.rest;
+
+import com.pusula.km.exception.ResourceNotFoundException;
+import com.pusula.km.exception.UnauthorizedAccessException;
+import com.pusula.km.mapper.UserMapper;
+import com.pusula.km.model.entity.TrustedDevice;
+import com.pusula.km.model.entity.User;
+import com.pusula.km.model.entity.Workspace;
+import com.pusula.km.model.enums.DeviceStatus;
+import com.pusula.km.model.request.LoginRequest;
+import com.pusula.km.model.response.ApiResponse;
+import com.pusula.km.model.response.LoginResponse;
+import com.pusula.km.repository.TrustedDeviceRepository;
+import com.pusula.km.repository.UserRepository;
+import com.pusula.km.security.jwt.JwtTokenProvider;
+import com.pusula.km.service.impl.AccessScopeService;
+import com.pusula.km.service.impl.AuditService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.web.bind.annotation.*;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/api/v1/auth")
+@RequiredArgsConstructor
+public class AuthController {
+
+    private final AuthenticationManager authenticationManager;
+    private final JwtTokenProvider tokenProvider;
+    private final UserRepository userRepository;
+    private final TrustedDeviceRepository trustedDeviceRepository;
+    private final AuditService auditService;
+    private final UserMapper userMapper;
+    private final AccessScopeService accessScopeService;
+
+    @PostMapping("/login")
+    public ResponseEntity<ApiResponse<LoginResponse>> login(@Valid @RequestBody LoginRequest request) {
+        try {
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(request.username(), request.password())
+            );
+
+            User user = userRepository.findByUsername(request.username())
+                    .orElseThrow(() -> new ResourceNotFoundException("User not found: " + request.username()));
+            if (!user.isActive()) {
+                throw new UnauthorizedAccessException("This account is inactive");
+            }
+
+            String deviceStatus = registerDevice(user, request.deviceId(), request.deviceLabel());
+            if ("REVOKED".equals(deviceStatus)) {
+                throw new UnauthorizedAccessException("This device was revoked. Ask an admin to approve it again.");
+            }
+
+            auditService.log(user.getId(), user.getRole(), com.pusula.km.model.enums.AuditAction.LOGIN_SUCCESS,
+                    "User", user.getId().toString(), user.getUsername(), "127.0.0.1", true, null, deviceStatus);
+
+            if ("PENDING".equals(deviceStatus)) {
+                String pending = tokenProvider.createPendingToken(user.getId(), user.getUsername(), user.getRole().name());
+                return ResponseEntity.ok(ApiResponse.success(
+                        session(user, pending, "PENDING",
+                                "An admin must approve this device before you can open the vault. After approval, this browser can sign in without another request."),
+                        "Device approval required"));
+            }
+
+            String token = tokenProvider.createToken(user.getId(), user.getUsername(), user.getRole().name());
+            return ResponseEntity.ok(ApiResponse.success(session(user, token, "APPROVED", "Login successful"), "Login successful"));
+        } catch (BadCredentialsException e) {
+            userRepository.findByUsername(request.username()).ifPresent(user ->
+                auditService.log(user.getId(), user.getRole(), com.pusula.km.model.enums.AuditAction.LOGIN_FAILURE,
+                        "User", user.getId().toString(), user.getUsername(), "127.0.0.1", false, null, null)
+            );
+            throw new UnauthorizedAccessException("Invalid username or password");
+        } catch (ResourceNotFoundException e) {
+            throw e;
+        } catch (UnauthorizedAccessException e) {
+            throw e;
+        } catch (Exception e) {
+            userRepository.findByUsername(request.username()).ifPresent(user ->
+                auditService.log(user.getId(), user.getRole(), com.pusula.km.model.enums.AuditAction.LOGIN_FAILURE,
+                        "User", user.getId().toString(), user.getUsername(), "127.0.0.1", false, null, null)
+            );
+            throw new UnauthorizedAccessException("Authentication failed: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/device-status")
+    public ResponseEntity<ApiResponse<LoginResponse>> deviceStatus(
+            @RequestHeader(value = "X-Device-Id", required = false) String deviceId) {
+        User user = accessScopeService.requireUser();
+        if (!accessScopeService.needsDeviceApproval(user)) {
+            String token = tokenProvider.createToken(user.getId(), user.getUsername(), user.getRole().name());
+            return ResponseEntity.ok(ApiResponse.success(session(user, token, "APPROVED", "Login successful"), "Approved"));
+        }
+        if (deviceId == null || deviceId.isBlank()) {
+            throw new UnauthorizedAccessException("Device id is missing");
+        }
+        TrustedDevice device = trustedDeviceRepository.findByUserIdAndDeviceId(user.getId(), deviceId.trim())
+                .orElseThrow(() -> new UnauthorizedAccessException("This device is not registered"));
+        if (device.getStatus() == DeviceStatus.REVOKED) {
+            throw new UnauthorizedAccessException("This device was revoked. Ask an admin to approve it again.");
+        }
+        if (device.getStatus() == DeviceStatus.APPROVED) {
+            device.setLastSeenAt(Instant.now());
+            trustedDeviceRepository.save(device);
+            String token = tokenProvider.createToken(user.getId(), user.getUsername(), user.getRole().name());
+            return ResponseEntity.ok(ApiResponse.success(session(user, token, "APPROVED", "Device approved"), "Device approved"));
+        }
+        return ResponseEntity.ok(ApiResponse.success(
+                session(user, null, "PENDING", "Still waiting for an admin to approve this device."),
+                "Pending"));
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<ApiResponse<Void>> logout() {
+        return ResponseEntity.ok(ApiResponse.success(null, "Logged out successfully"));
+    }
+
+    private LoginResponse session(User user, String token, String status, String message) {
+        List<UUID> visible = accessScopeService.visibleWorkspaces(user).stream().map(Workspace::getId).toList();
+        return new LoginResponse(token, userMapper.toResponse(user), visible, user.getRole(), status, message);
+    }
+
+    private String registerDevice(User user, String deviceId, String label) {
+        if (!accessScopeService.needsDeviceApproval(user)) {
+            return "APPROVED";
+        }
+        if (deviceId == null || deviceId.isBlank()) {
+            throw new UnauthorizedAccessException("A device id is required for employee sign-in");
+        }
+        Instant now = Instant.now();
+        TrustedDevice device = trustedDeviceRepository.findByUserIdAndDeviceId(user.getId(), deviceId.trim())
+                .orElseGet(() -> TrustedDevice.builder()
+                        .userId(user.getId())
+                        .deviceId(deviceId.trim())
+                        .status(DeviceStatus.PENDING)
+                        .firstSeenAt(now)
+                        .build());
+        device.setLabel(label == null ? "Browser" : label.substring(0, Math.min(label.length(), 160)));
+        device.setLastSeenAt(now);
+        if (device.getStatus() == null) {
+            device.setStatus(DeviceStatus.PENDING);
+        }
+        trustedDeviceRepository.save(device);
+        return device.getStatus().name();
+    }
+}
