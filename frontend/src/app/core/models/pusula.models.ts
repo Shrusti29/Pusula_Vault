@@ -370,10 +370,10 @@ export interface PaginatedResponse<T> {
   last: boolean;
 }
 
-export interface LoginRequest { username: string; password: string; rememberMe?: boolean; deviceId?: string; deviceLabel?: string; }
+export interface LoginRequest { email: string; password: string; rememberMe?: boolean; deviceId?: string; deviceLabel?: string; }
 export interface LoginResponse { token: string | null; user: UserResponse; visibleWorkspaceIds: string[]; role: Role; deviceStatus?: string; deviceMessage?: string; }
 export interface ChangeRoleRequest { userId: string; newRole: Role; }
-export interface CreateUserRequest { username: string; email: string; fullName: string; role: Role; password: string; }
+export interface CreateUserRequest { email: string; fullName: string; role: Role; password: string; featurePermissions?: string[]; workspaceIds?: string[]; }
 export interface CreateWorkspaceRequest { name: string; description: string; }
 export interface UpdateWorkspaceRequest { name?: string; description?: string; }
 export interface CreateFolderRequest { workspaceId: string; parentFolderId?: string; name: string; }

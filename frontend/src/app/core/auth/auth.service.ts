@@ -44,9 +44,9 @@ export class AuthService {
     }
   }
 
-  login(credentials: { username: string; password: string }): Observable<ApiResponse<LoginResponse>> {
+  login(credentials: { email: string; password: string }): Observable<ApiResponse<LoginResponse>> {
     const loginRequest: LoginRequest = {
-      username: credentials.username,
+      email: credentials.email.trim().toLowerCase(),
       password: credentials.password,
       deviceId: deviceId(),
       deviceLabel: navigator.userAgent.slice(0, 140)
@@ -118,4 +118,3 @@ export class AuthService {
     return roles.includes(this.currentRole() || '');
   }
 }
-

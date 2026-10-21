@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.core.annotation.Order;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
@@ -30,6 +31,15 @@ public class DataSeeder implements CommandLineRunner {
     private final RetentionRuleRepository retentionRuleRepository;
     private final PasswordEncoder passwordEncoder;
 
+    @Value("${pv.initial-admin.email:}")
+    private String initialAdminEmail;
+
+    @Value("${pv.initial-admin.password:}")
+    private String initialAdminPassword;
+
+    @Value("${pv.initial-admin.name:System Administrator}")
+    private String initialAdminName;
+
     @Override
     public void run(String... args) {
         if (userRepository.count() > 0) {
@@ -37,7 +47,13 @@ public class DataSeeder implements CommandLineRunner {
             return;
         }
 
-        log.info("Starting data seeding...");
+        if (initialAdminEmail.isBlank() || initialAdminPassword.isBlank()
+                || !initialAdminEmail.trim().matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
+            log.info("No initial administrator configured; skipping first-run seed.");
+            return;
+        }
+
+        log.info("Starting first-run data seeding...");
 
         seedUsers();
         seedWorkspaces();
@@ -45,15 +61,16 @@ public class DataSeeder implements CommandLineRunner {
         seedGovernancePolicies();
         seedAuditLogs();
 
-        log.info("Data seeding completed!");
+        log.info("First-run data seeding completed.");
     }
 
     private void seedUsers() {
+        String email = initialAdminEmail.trim().toLowerCase();
         User admin = User.builder()
-                .username("admin")
-                .email("admin@pusula.com")
-                .displayName("System Administrator")
-                .passwordHash(passwordEncoder.encode("admin123"))
+                .username(email)
+                .email(email)
+                .displayName(initialAdminName.trim())
+                .passwordHash(passwordEncoder.encode(initialAdminPassword))
                 .role(com.pusula.km.model.enums.Role.ADMIN)
                 .active(true)
                 .featurePermissions(Set.of(
@@ -65,47 +82,12 @@ public class DataSeeder implements CommandLineRunner {
                 .createdAt(Instant.now())
                 .updatedAt(Instant.now())
                 .build();
-
-        User manager = User.builder()
-                .username("manager")
-                .email("manager@pusula.com")
-                .displayName("Project Manager")
-                .passwordHash(passwordEncoder.encode("manager123"))
-                .role(com.pusula.km.model.enums.Role.MANAGER)
-                .active(true)
-                .featurePermissions(Set.of(
-                    "VIEW_WORKSPACES", "CREATE_WORKSPACES",
-                    "VIEW_DOCUMENTS", "CREATE_DOCUMENTS", "EDIT_DOCUMENTS",
-                    "VIEW_AUDIT_LOGS", "VIEW_ANALYTICS", "GOVERNANCE_CONTROLS"
-                ))
-                .createdAt(Instant.now())
-                .updatedAt(Instant.now())
-                .build();
-
-        User employee = User.builder()
-                .username("employee")
-                .email("employee@pusula.com")
-                .displayName("Regular Employee")
-                .passwordHash(passwordEncoder.encode("employee123"))
-                .role(com.pusula.km.model.enums.Role.EMPLOYEE)
-                .active(true)
-                .featurePermissions(Set.of(
-                    "VIEW_WORKSPACES",
-                    "VIEW_DOCUMENTS", "CREATE_DOCUMENTS", "EDIT_DOCUMENTS"
-                ))
-                .createdAt(Instant.now())
-                .updatedAt(Instant.now())
-                .build();
-
         userRepository.save(admin);
-        userRepository.save(manager);
-        userRepository.save(employee);
-
-        log.info("Seeded 3 users");
+        log.info("Seeded initial administrator account.");
     }
 
     private void seedWorkspaces() {
-        User admin = userRepository.findByUsername("admin").orElseThrow();
+        User admin = initialAdmin();
 
         Workspace engineering = Workspace.builder()
                 .name("Engineering")
@@ -137,7 +119,7 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     private void seedDocuments() {
-        User admin = userRepository.findByUsername("admin").orElseThrow();
+        User admin = initialAdmin();
         List<Workspace> workspaces = workspaceRepository.findAll();
         Workspace engineering = workspaces.stream().filter(w -> w.getName().equals("Engineering")).findFirst().orElseThrow();
         Workspace marketing = workspaces.stream().filter(w -> w.getName().equals("Marketing")).findFirst().orElseThrow();
@@ -246,7 +228,7 @@ public class DataSeeder implements CommandLineRunner {
         retentionRuleRepository.save(standardRule);
         retentionRuleRepository.save(confidentialRule);
 
-        User admin = userRepository.findByUsername("admin").orElseThrow();
+        User admin = initialAdmin();
 
         GovernancePolicy policy1 = GovernancePolicy.builder()
                 .name("Document Classification Policy")
@@ -284,8 +266,13 @@ public class DataSeeder implements CommandLineRunner {
         log.info("Seeded 2 retention rules and 2 governance policies");
     }
 
+    private User initialAdmin() {
+        return userRepository.findByEmailIgnoreCase(initialAdminEmail.trim())
+                .orElseThrow(() -> new IllegalStateException("Initial administrator was not created"));
+    }
+
     private void seedAuditLogs() {
-        User admin = userRepository.findByUsername("admin").orElseThrow();
+        User admin = initialAdmin();
 
         AuditLog log1 = AuditLog.builder()
                 .actorUserId(admin.getId())
@@ -293,7 +280,7 @@ public class DataSeeder implements CommandLineRunner {
                 .action(AuditAction.USER_CREATED)
                 .entityType("User")
                 .entityId(admin.getId().toString())
-                .entityName("admin")
+                .entityName(admin.getEmail())
                 .ip("127.0.0.1")
                 .userAgent("Mozilla/5.0")
                 .sessionId(UUID.randomUUID().toString())

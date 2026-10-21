@@ -13,6 +13,9 @@ import com.pusula.km.model.entity.User;
 import com.pusula.km.model.response.ApiResponse;
 import com.pusula.km.model.response.PaginatedResponse;
 import com.pusula.km.repository.UserRepository;
+import jakarta.validation.Valid;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.access.prepost.PreAuthorize;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -29,6 +32,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/admin/users")
+@PreAuthorize("hasAnyRole('ADMIN', 'FOUNDER')")
 @RequiredArgsConstructor
 public class AdminUserController {
 
@@ -70,14 +74,21 @@ public class AdminUserController {
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse<UserResponse>> createUser(@RequestBody CreateUserRequest req) {
+    public ResponseEntity<ApiResponse<UserResponse>> createUser(@Valid @RequestBody CreateUserRequest req) {
+        if (req.role() == Role.FOUNDER && !isFounder()) {
+            throw new com.pusula.km.exception.ForbiddenException("Only a founder can create a founder account");
+        }
+        String email = req.email().trim().toLowerCase();
+        if (userRepository.existsByEmailIgnoreCase(email)) {
+            throw new com.pusula.km.exception.ConflictException("An account with this email already exists");
+        }
         java.util.Set<String> permissions = req.featurePermissions() != null ? req.featurePermissions() : java.util.Set.of();
         if ((req.role() == Role.EMPLOYEE || req.role() == Role.INTERN) && permissions.isEmpty()) {
             permissions = java.util.Set.of("VIEW_WORKSPACES", "VIEW_DOCUMENTS", "CREATE_DOCUMENTS", "EDIT_DOCUMENTS");
         }
         User user = User.builder()
-                .username(req.username())
-                .email(req.email())
+                .username(email)
+                .email(email)
                 .displayName(req.fullName())
                 .passwordHash(passwordEncoder.encode(req.password()))
                 .role(req.role())
@@ -86,7 +97,12 @@ public class AdminUserController {
                 .createdAt(Instant.now())
                 .updatedAt(Instant.now())
                 .build();
-        User saved = userRepository.save(user);
+        User saved;
+        try {
+            saved = userRepository.save(user);
+        } catch (DataIntegrityViolationException ex) {
+            throw new com.pusula.km.exception.ConflictException("An account with this email already exists");
+        }
         accessScopeService.replaceGrants(saved.getId(), req.workspaceIds());
         return ResponseEntity.ok(ApiResponse.success(userMapper.toResponse(saved), "User created successfully"));
     }
@@ -94,12 +110,26 @@ public class AdminUserController {
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<UserResponse>> updateUser(
             @PathVariable UUID id,
-            @RequestBody UpdateUserRequest req) {
+            @Valid @RequestBody UpdateUserRequest req) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + id));
         if (req.fullName() != null) user.setDisplayName(req.fullName());
-        if (req.email() != null) user.setEmail(req.email());
-        if (req.role() != null) user.setRole(req.role());
+        if (req.email() != null) {
+            String email = req.email().trim().toLowerCase();
+            userRepository.findByEmailIgnoreCase(email)
+                    .filter(existing -> !existing.getId().equals(id))
+                    .ifPresent(existing -> {
+                        throw new com.pusula.km.exception.ConflictException("An account with this email already exists");
+                    });
+            user.setEmail(email);
+            user.setUsername(email);
+        }
+        if (req.role() != null) {
+            if (req.role() == Role.FOUNDER && !isFounder()) {
+                throw new com.pusula.km.exception.ForbiddenException("Only a founder can assign the founder role");
+            }
+            user.setRole(req.role());
+        }
         if (req.password() != null && !req.password().isBlank()) {
             user.setPasswordHash(passwordEncoder.encode(req.password()));
         }
@@ -120,6 +150,9 @@ public class AdminUserController {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + id));
         boolean active = body != null && body.containsKey("active") ? Boolean.TRUE.equals(body.get("active")) : false;
+        if (!active && id.equals(currentUserId())) {
+            throw new com.pusula.km.exception.ConflictException("You cannot deactivate your own account");
+        }
         user.setActive(active);
         user.setUpdatedAt(Instant.now());
         User saved = userRepository.save(user);
@@ -130,9 +163,17 @@ public class AdminUserController {
     public ResponseEntity<ApiResponse<UserResponse>> changeRole(@RequestBody ChangeRoleRequest req) {
         User user = userRepository.findById(req.userId())
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + req.userId()));
+        if (req.newRole() == Role.FOUNDER && !isFounder()) {
+            throw new com.pusula.km.exception.ForbiddenException("Only a founder can assign the founder role");
+        }
         user.setRole(req.newRole());
         user.setUpdatedAt(Instant.now());
         User saved = userRepository.save(user);
         return ResponseEntity.ok(ApiResponse.success(userMapper.toResponse(saved), "User role changed successfully"));
+    }
+
+    private boolean isFounder() {
+        return SecurityContextHolder.getContext().getAuthentication().getAuthorities().stream()
+                .anyMatch(authority -> "ROLE_FOUNDER".equals(authority.getAuthority()));
     }
 }

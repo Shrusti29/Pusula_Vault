@@ -4,6 +4,8 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
+import io.jsonwebtoken.io.Decoders;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import java.security.Key;
 import java.util.Date;
@@ -12,8 +14,19 @@ import java.util.UUID;
 @Component
 public class JwtTokenProvider {
 
-    private final Key key = Keys.secretKeyFor(SignatureAlgorithm.HS256);
+    private final Key key;
     private final long validityInMilliseconds = 3600000; // 1 hour
+
+    public JwtTokenProvider(@Value("${pv.security.jwt-secret:}") String encodedSecret) {
+        if (encodedSecret == null || encodedSecret.isBlank()) {
+            throw new IllegalStateException("PV_JWT_SECRET must be configured with a base64-encoded 256-bit secret");
+        }
+        try {
+            this.key = Keys.hmacShaKeyFor(Decoders.BASE64.decode(encodedSecret.trim()));
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalStateException("PV_JWT_SECRET must be valid base64 and at least 256 bits", ex);
+        }
+    }
 
     public String createToken(UUID userId, String username, String role) {
         return createToken(userId, username, role, "full", validityInMilliseconds);

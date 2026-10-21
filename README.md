@@ -117,6 +117,33 @@ npm start
 ```
 *(Frontend runs on port `4200` with proxy to backend)*
 
+### Email authentication setup
+
+Authentication uses the existing stateless JWT flow and BCrypt password hashing. Users sign in with the email address stored in `pv_user`; only authenticated administrators or founders can create and deactivate accounts from the User Management page.
+
+For a new database, configure the first administrator before starting the backend. Do not commit these values:
+
+```powershell
+$env:PV_INITIAL_ADMIN_EMAIL = "you@example.com"
+$env:PV_INITIAL_ADMIN_PASSWORD = "use-a-long-unique-password"
+$env:PV_INITIAL_ADMIN_NAME = "Your Name"
+$env:PV_JWT_SECRET = "base64-encoded-32-byte-secret"
+```
+
+Generate a JWT secret with OpenSSL:
+
+```powershell
+$env:PV_JWT_SECRET = (openssl rand -base64 32)
+```
+
+Then start the backend:
+
+```powershell
+mvn spring-boot:run -f backend\pom.xml "-Dspring-boot.run.profiles=local"
+```
+
+After the first administrator is created, use the administrator-only **User Management** screen to add additional users with their name, email, password, and role. The backend stores only BCrypt hashes and returns no password fields.
+
 ---
 
 ## 🔑 Default Seed Accounts & Credentials
