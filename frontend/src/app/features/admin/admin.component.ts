@@ -454,15 +454,15 @@ export class AdminComponent implements OnInit {
   loadUsers() {
     this.apiService.listUsers(0, 50).subscribe({
       next: (page) => {
-        this.users.set(page.content.map((u) => ({
+        this.users.set(page.content.map((u: any) => ({
           id: u.id,
           username: u.username,
           email: u.email,
-          displayName: u.fullName || u.email,
+          displayName: u.fullName || u.full_name || u.displayName || u.display_name || u.email,
           role: u.role,
           active: u.active,
-          featurePermissions: u.featurePermissions || [],
-          workspaceIds: u.workspaceIds || []
+          featurePermissions: u.featurePermissions || u.feature_permissions || [],
+          workspaceIds: u.workspaceIds || u.workspace_ids || []
         })));
       },
       error: (error) => console.error('Failed to load users:', error)

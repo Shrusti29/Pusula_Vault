@@ -61,29 +61,29 @@ interface RetentionRule {
               <div class="policy-card">
                 <div class="policy-header">
                   <h3>{{ policy.name }}</h3>
-                  <span [class]="'pv-badge ' + getSensitivityBadgeClass(policy.sensitivityLevel)">
-                    {{ policy.sensitivityLevel }}
+                  <span [class]="'pv-badge ' + getSensitivityBadgeClass(policy.sensitivityLevel || $any(policy).sensitivity_level)">
+                    {{ policy.sensitivityLevel || $any(policy).sensitivity_level }}
                   </span>
                 </div>
                 <p class="policy-description">{{ policy.description }}</p>
-                <div class="policy-text">{{ policy.policyText }}</div>
+                <div class="policy-text">{{ policy.policyText || $any(policy).policy_text }}</div>
                 <div class="policy-settings">
                   <div class="setting-item">
                     <span class="setting-label">Enforce on Create:</span>
-                    <span [class]="'setting-value ' + (policy.enforceOnCreate ? 'enabled' : 'disabled')">
-                      {{ policy.enforceOnCreate ? 'Yes' : 'No' }}
+                    <span [class]="'setting-value ' + ((policy.enforceOnCreate ?? $any(policy).enforce_on_create) ? 'enabled' : 'disabled')">
+                      {{ (policy.enforceOnCreate ?? $any(policy).enforce_on_create) ? 'Yes' : 'No' }}
                     </span>
                   </div>
                   <div class="setting-item">
                     <span class="setting-label">Enforce on Edit:</span>
-                    <span [class]="'setting-value ' + (policy.enforceOnEdit ? 'enabled' : 'disabled')">
-                      {{ policy.enforceOnEdit ? 'Yes' : 'No' }}
+                    <span [class]="'setting-value ' + ((policy.enforceOnEdit ?? $any(policy).enforce_on_edit) ? 'enabled' : 'disabled')">
+                      {{ (policy.enforceOnEdit ?? $any(policy).enforce_on_edit) ? 'Yes' : 'No' }}
                     </span>
                   </div>
                   <div class="setting-item">
                     <span class="setting-label">Require Approval:</span>
-                    <span [class]="'setting-value ' + (policy.requireApproval ? 'enabled' : 'disabled')">
-                      {{ policy.requireApproval ? 'Yes' : 'No' }}
+                    <span [class]="'setting-value ' + ((policy.requireApproval ?? $any(policy).require_approval) ? 'enabled' : 'disabled')">
+                      {{ (policy.requireApproval ?? $any(policy).require_approval) ? 'Yes' : 'No' }}
                     </span>
                   </div>
                 </div>
@@ -120,18 +120,18 @@ interface RetentionRule {
                         <div class="rule-description">{{ rule.description }}</div>
                       </div>
                     </td>
-                    <td>{{ rule.retentionDays }} days</td>
+                    <td>{{ (rule.retentionDays ?? $any(rule).retention_days) }} days</td>
                     <td>
-                      <span [class]="'pv-badge ' + (rule.autoArchive ? 'pv-badge-green' : 'pv-badge-red')">
-                        {{ rule.autoArchive ? 'Yes' : 'No' }}
+                      <span [class]="'pv-badge ' + ((rule.autoArchive ?? $any(rule).auto_archive) ? 'pv-badge-green' : 'pv-badge-red')">
+                        {{ (rule.autoArchive ?? $any(rule).auto_archive) ? 'Yes' : 'No' }}
                       </span>
                     </td>
                     <td>
-                      <span [class]="'pv-badge ' + (rule.autoDelete ? 'pv-badge-red' : 'pv-badge-green')">
-                        {{ rule.autoDelete ? 'Yes' : 'No' }}
+                      <span [class]="'pv-badge ' + ((rule.autoDelete ?? $any(rule).auto_delete) ? 'pv-badge-red' : 'pv-badge-green')">
+                        {{ (rule.autoDelete ?? $any(rule).auto_delete) ? 'Yes' : 'No' }}
                       </span>
                     </td>
-                    <td>{{ rule.applicableDocumentTypes }}</td>
+                    <td>{{ rule.applicableDocumentTypes || $any(rule).applicable_document_types }}</td>
                   </tr>
                 }
               </tbody>

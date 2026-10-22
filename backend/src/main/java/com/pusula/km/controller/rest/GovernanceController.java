@@ -56,12 +56,17 @@ public class GovernanceController {
                     .orElseThrow(() -> new ResourceNotFoundException("Retention rule not found"));
         }
 
+        String policyName = req.name() != null && !req.name().isBlank() ? req.name() : "Governance Policy";
+        String desc = req.description() != null && !req.description().isBlank() ? req.description() : policyName;
+        String pText = req.policyText() != null && !req.policyText().isBlank() ? req.policyText() : policyName;
+        com.pusula.km.model.enums.SensitivityLevel sensLevel = req.sensitivityLevel() != null ? req.sensitivityLevel() : com.pusula.km.model.enums.SensitivityLevel.INTERNAL;
+
         GovernancePolicy policy = GovernancePolicy.builder()
-                .name(req.name())
-                .description(req.description())
-                .sensitivityLevel(req.sensitivityLevel())
+                .name(policyName)
+                .description(desc)
+                .sensitivityLevel(sensLevel)
                 .retentionRule(retentionRule)
-                .policyText(req.policyText())
+                .policyText(pText)
                 .createdBy(currentUser)
                 .active(true)
                 .enforceOnCreate(req.enforceOnCreate())
@@ -93,13 +98,18 @@ public class GovernanceController {
 
     @PostMapping("/retention-rules")
     public ResponseEntity<ApiResponse<RetentionRule>> createRetentionRule(@RequestBody com.pusula.km.model.dto.CreateRetentionRuleRequest req) {
+        String ruleName = req.name() != null && !req.name().isBlank() ? req.name() : "Retention Rule";
+        String desc = req.description() != null && !req.description().isBlank() ? req.description() : ruleName;
+        Integer retDays = req.retentionDays() != null ? req.retentionDays() : 365;
+        String docTypes = req.applicableDocumentTypes() != null && !req.applicableDocumentTypes().isBlank() ? req.applicableDocumentTypes() : "ALL";
+
         RetentionRule rule = RetentionRule.builder()
-                .name(req.name())
-                .description(req.description())
-                .retentionDays(req.retentionDays())
+                .name(ruleName)
+                .description(desc)
+                .retentionDays(retDays)
                 .autoArchive(req.autoArchive())
                 .autoDelete(req.autoDelete())
-                .applicableDocumentTypes(req.applicableDocumentTypes())
+                .applicableDocumentTypes(docTypes)
                 .build();
 
         RetentionRule saved = retentionRuleRepository.save(rule);

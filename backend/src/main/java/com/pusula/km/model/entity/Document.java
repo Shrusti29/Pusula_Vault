@@ -15,6 +15,8 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import java.time.Instant;
 import java.util.UUID;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -24,6 +26,7 @@ import java.util.UUID;
     @Index(name = "idx_doc_ws_folder_status", columnList = "workspace_id,folder_id,status")
 })
 @EntityListeners(AuditingEntityListener.class)
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Document {
 
     @Id
