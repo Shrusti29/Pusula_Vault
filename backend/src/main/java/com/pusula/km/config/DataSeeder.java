@@ -87,11 +87,10 @@ public class DataSeeder implements CommandLineRunner {
             userRepository.save(admin);
             log.info("Seeded initial administrator account.");
         } else {
-            admin.setPasswordHash(passwordEncoder.encode(initialAdminPassword));
-            admin.setDisplayName(initialAdminName.trim());
-            admin.setUpdatedAt(Instant.now());
-            userRepository.save(admin);
-            log.info("Reset password for existing administrator.");
+            // Preserve the existing admin password hash and other fields.
+            // This prevents the seeded password (admin123) from overwriting a password
+            // the user may have changed after the first run.
+            log.info("Admin user already exists; preserving existing password and profile.");
         }
     }
 
