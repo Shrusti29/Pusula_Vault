@@ -34,10 +34,10 @@ export class AuthService {
     const savedToken = localStorage.getItem(this.tokenKey);
     if (raw && savedToken) {
       try {
-        const session = JSON.parse(raw) as LoginResponse;
+        const session = JSON.parse(raw) as any;
         this.currentUser.set(session.user);
         this.currentRole.set(session.role);
-        this.visibleWorkspaceIds.set(session.visibleWorkspaceIds || []);
+        this.visibleWorkspaceIds.set(session.visibleWorkspaceIds || session.visible_workspace_ids || []);
       } catch {
         this.clearAuth();
       }
@@ -78,7 +78,7 @@ export class AuthService {
     localStorage.setItem(SESSION_KEY, JSON.stringify(session));
     this.currentUser.set(session.user);
     this.currentRole.set(session.role);
-    this.visibleWorkspaceIds.set(session.visibleWorkspaceIds || []);
+    this.visibleWorkspaceIds.set(session.visibleWorkspaceIds || (session as any).visible_workspace_ids || []);
   }
 
   logout(): void {
