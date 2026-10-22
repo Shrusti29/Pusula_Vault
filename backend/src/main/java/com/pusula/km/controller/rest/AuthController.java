@@ -131,14 +131,12 @@ public class AuthController {
         if (!accessScopeService.needsDeviceApproval(user)) {
             return "APPROVED";
         }
-        if (deviceId == null || deviceId.isBlank()) {
-            throw new UnauthorizedAccessException("A device id is required for employee sign-in");
-        }
+        String devId = (deviceId != null && !deviceId.isBlank()) ? deviceId.trim() : "DEV-" + UUID.randomUUID().toString().substring(0, 8);
         Instant now = Instant.now();
-        TrustedDevice device = trustedDeviceRepository.findByUserIdAndDeviceId(user.getId(), deviceId.trim())
+        TrustedDevice device = trustedDeviceRepository.findByUserIdAndDeviceId(user.getId(), devId)
                 .orElseGet(() -> TrustedDevice.builder()
                         .userId(user.getId())
-                        .deviceId(deviceId.trim())
+                        .deviceId(devId)
                         .status(DeviceStatus.PENDING)
                         .firstSeenAt(now)
                         .build());
