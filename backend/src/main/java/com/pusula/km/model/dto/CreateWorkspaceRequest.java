@@ -1,6 +1,8 @@
 package com.pusula.km.model.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 public record CreateWorkspaceRequest(
-        String name,
-        String description
+        @JsonProperty("name") String name,
+        @JsonProperty("description") String description
 ) {}
