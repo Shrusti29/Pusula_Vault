@@ -24,6 +24,7 @@ public class DataSeeder implements CommandLineRunner {
 
     private final UserRepository userRepository;
     private final WorkspaceRepository workspaceRepository;
+    private final WorkspaceGrantRepository workspaceGrantRepository;
     private final DocumentRepository documentRepository;
     private final FolderRepository folderRepository;
     private final AuditLogRepository auditLogRepository;
@@ -86,14 +87,28 @@ public class DataSeeder implements CommandLineRunner {
                     .build();
             userRepository.save(admin);
             log.info("Seeded initial administrator account.");
-        } else {
-            // Preserve the existing admin password hash and other fields.
-            // This prevents the seeded password (admin123) from overwriting a password
-            // the user may have changed after the first run.
-            log.info("Admin user already exists; preserving existing password and profile.");
+        }
+
+        String empEmail = "employee@gmail.com";
+        User employee = userRepository.findByEmailIgnoreCase(empEmail).orElse(null);
+        if (employee == null) {
+            employee = User.builder()
+                    .username(empEmail)
+                    .email(empEmail)
+                    .displayName("Demo Employee")
+                    .passwordHash(passwordEncoder.encode("employee123"))
+                    .role(com.pusula.km.model.enums.Role.EMPLOYEE)
+                    .active(true)
+                    .featurePermissions(Set.of(
+                        "VIEW_WORKSPACES", "VIEW_DOCUMENTS", "CREATE_DOCUMENTS", "EDIT_DOCUMENTS"
+                    ))
+                    .createdAt(Instant.now())
+                    .updatedAt(Instant.now())
+                    .build();
+            userRepository.save(employee);
+            log.info("Seeded initial employee account (employee@gmail.com).");
         }
     }
-
 
     private void seedWorkspaces() {
         User admin = initialAdmin();
@@ -124,7 +139,26 @@ public class DataSeeder implements CommandLineRunner {
 
         workspaceRepository.saveAll(List.of(engineering, marketing, finance));
 
-        log.info("Seeded 3 workspaces");
+        User employee = userRepository.findByEmailIgnoreCase("employee@gmail.com").orElse(null);
+        if (employee != null) {
+            WorkspaceGrant g1 = WorkspaceGrant.builder()
+                    .userId(employee.getId())
+                    .workspaceId(engineering.getId())
+                    .canEdit(true)
+                    .grantedBy(admin.getId())
+                    .createdAt(Instant.now())
+                    .build();
+            WorkspaceGrant g2 = WorkspaceGrant.builder()
+                    .userId(employee.getId())
+                    .workspaceId(marketing.getId())
+                    .canEdit(true)
+                    .grantedBy(admin.getId())
+                    .createdAt(Instant.now())
+                    .build();
+            workspaceGrantRepository.saveAll(List.of(g1, g2));
+        }
+
+        log.info("Seeded 3 workspaces and employee access grants");
     }
 
     private void seedDocuments() {
