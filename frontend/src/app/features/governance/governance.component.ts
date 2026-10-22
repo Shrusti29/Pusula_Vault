@@ -503,7 +503,7 @@ export class GovernanceComponent implements OnInit {
   }
 
   loadPolicies() {
-    this.apiService.get<GovernancePolicy[]>('/api/v1/governance/policies').subscribe({
+    this.apiService.get<GovernancePolicy[]>('/governance/policies').subscribe({
       next: (response) => {
         this.policies.set(response.data);
       },
@@ -512,7 +512,7 @@ export class GovernanceComponent implements OnInit {
   }
 
   loadRetentionRules() {
-    this.apiService.get<RetentionRule[]>('/api/v1/governance/retention-rules').subscribe({
+    this.apiService.get<RetentionRule[]>('/governance/retention-rules').subscribe({
       next: (response) => {
         this.retentionRules.set(response.data);
       },
@@ -522,10 +522,18 @@ export class GovernanceComponent implements OnInit {
 
   createPolicy() {
     if (this.policyForm.valid) {
-      this.apiService.post<GovernancePolicy>('/api/v1/governance/policies', this.policyForm.value).subscribe({
+      this.apiService.post<GovernancePolicy>('/governance/policies', this.policyForm.value).subscribe({
         next: () => {
           this.showCreatePolicyModal.set(false);
-          this.policyForm.reset();
+          this.policyForm.reset({
+            name: '',
+            description: '',
+            sensitivityLevel: 'INTERNAL',
+            policyText: '',
+            enforceOnCreate: true,
+            enforceOnEdit: true,
+            requireApproval: false
+          });
           this.loadPolicies();
         },
         error: (error: any) => console.error('Failed to create policy:', error)
@@ -535,10 +543,17 @@ export class GovernanceComponent implements OnInit {
 
   createRule() {
     if (this.ruleForm.valid) {
-      this.apiService.post<RetentionRule>('/api/v1/governance/retention-rules', this.ruleForm.value).subscribe({
+      this.apiService.post<RetentionRule>('/governance/retention-rules', this.ruleForm.value).subscribe({
         next: () => {
           this.showCreateRuleModal.set(false);
-          this.ruleForm.reset();
+          this.ruleForm.reset({
+            name: '',
+            description: '',
+            retentionDays: 2555,
+            applicableDocumentTypes: 'WORD,EXCEL,PDF',
+            autoArchive: true,
+            autoDelete: false
+          });
           this.loadRetentionRules();
         },
         error: (error: any) => console.error('Failed to create retention rule:', error)
@@ -547,7 +562,7 @@ export class GovernanceComponent implements OnInit {
   }
 
   togglePolicyActive(policy: GovernancePolicy) {
-    this.apiService.put<GovernancePolicy>(`/api/v1/governance/policies/${policy.id}/active`, { active: !policy.active }).subscribe({
+    this.apiService.put<GovernancePolicy>(`/governance/policies/${policy.id}/active`, { active: !policy.active }).subscribe({
       next: () => this.loadPolicies(),
       error: (error: any) => console.error('Failed to toggle policy:', error)
     });
