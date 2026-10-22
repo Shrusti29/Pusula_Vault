@@ -280,7 +280,7 @@ public class AnalyticsController {
                     rp.getGranteeType() != null ? rp.getGranteeType() : GranteeType.USER,
                     grantee,
                     resLabel,
-                    rp.getPermission() != null ? List.of(rp.getPermission()) : List.of(Permission.READ),
+                    rp.getPermission() != null ? List.of(rp.getPermission()) : List.of(Permission.VIEW),
                     grantedAt,
                     granter
             ));
@@ -292,7 +292,7 @@ public class AnalyticsController {
                     GranteeType.ROLE,
                     "ADMIN",
                     "All Workspaces",
-                    List.of(Permission.MANAGE, Permission.READ, Permission.WRITE),
+                    List.of(Permission.MANAGE_ACCESS, Permission.VIEW, Permission.EDIT),
                     Instant.now().minus(3, ChronoUnit.DAYS),
                     "System"
             ));
@@ -301,7 +301,7 @@ public class AnalyticsController {
                     GranteeType.ROLE,
                     "EMPLOYEE",
                     "Engineering & Marketing",
-                    List.of(Permission.READ, Permission.WRITE),
+                    List.of(Permission.VIEW, Permission.EDIT),
                     Instant.now().minus(2, ChronoUnit.DAYS),
                     "admin@gmail.com"
             ));
@@ -359,7 +359,7 @@ public class AnalyticsController {
             map.put("actor_name", actor.length() > 8 ? actor.substring(0, 8) : actor);
             map.put("resourceLabel", ev.getResourceType() + " #" + ev.getResourceId());
             map.put("resource_label", ev.getResourceType() + " #" + ev.getResourceId());
-            map.put("reason", ev.getDescription() != null ? ev.getDescription() : ev.getEventType().name());
+            map.put("reason", ev.getDetails() != null ? ev.getDetails() : ev.getEventType().name());
             map.put("at", ev.getDetectedAt() != null ? ev.getDetectedAt().toString() : Instant.now().toString());
             result.add(map);
         }
