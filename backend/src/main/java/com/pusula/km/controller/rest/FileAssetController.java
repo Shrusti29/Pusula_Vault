@@ -117,11 +117,11 @@ public class FileAssetController {
             boolean match = true;
             if (workspaceId != null) {
                 UUID aWsId = a.getWorkspace() != null ? a.getWorkspace().getId() : (a.getDocument() != null && a.getDocument().getWorkspace() != null ? a.getDocument().getWorkspace().getId() : null);
-                if (aWsId != null && !workspaceId.equals(aWsId)) match = false;
+                if (aWsId == null || !workspaceId.equals(aWsId)) match = false;
             }
             if (folderId != null) {
                 UUID aFolderId = a.getFolder() != null ? a.getFolder().getId() : (a.getDocument() != null && a.getDocument().getFolder() != null ? a.getDocument().getFolder().getId() : null);
-                if (aFolderId != null && !folderId.equals(aFolderId)) match = false;
+                if (aFolderId == null || !folderId.equals(aFolderId)) match = false;
             }
             if (documentId != null) {
                 if (a.getDocument() == null || !documentId.equals(a.getDocument().getId())) match = false;
