@@ -187,7 +187,7 @@ interface FeaturePermission {
                       <h4>{{ category }}</h4>
                       @for (perm of getPermissionsByCategory(category); track perm.key) {
                         <label class="permission-checkbox">
-                          <input type="checkbox" [value]="perm.key" formControlName="featurePermissions" />
+                          <input type="checkbox" [checked]="selectedPermissions().includes(perm.key)" (change)="togglePermission(perm.key, $any($event.target).checked)" />
                           <span>{{ perm.label }}</span>
                         </label>
                       }
