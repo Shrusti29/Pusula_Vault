@@ -14,17 +14,14 @@ import com.pusula.km.repository.UserRepository;
 @Order(1) // runs after DataSeeder (order 0)
 public class AdminPasswordResetter {
 
-    // BCrypt hash for the literal password "admin123"
-    private static final String ADMIN_PASSWORD_HASH = "$2a$10$7QhYvH1W6Ol2GkKvD3cZPuVO5iijLzGAnYqL1fUO1116p7vKz2ZxK"; // generated once
-
     @Bean
-    public CommandLineRunner resetAdminPassword(UserRepository userRepository) {
+    public CommandLineRunner resetAdminPassword(UserRepository userRepository, org.springframework.security.crypto.password.PasswordEncoder passwordEncoder) {
         return args -> {
             String adminEmail = System.getenv().getOrDefault("PV_INITIAL_ADMIN_EMAIL", "admin@gmail.com");
             userRepository.findByEmailIgnoreCase(adminEmail).ifPresent(admin -> {
-                admin.setPasswordHash(ADMIN_PASSWORD_HASH);
+                admin.setPasswordHash(passwordEncoder.encode("admin123"));
                 userRepository.save(admin);
-                System.out.println("✅ Admin password forced to known hash (admin123)");
+                System.out.println("✅ Admin password encoded and reset successfully to admin123");
             });
         };
     }
