@@ -88,7 +88,29 @@ public class VaultKnowledgeService {
             String period = lower.contains("month") ? "MONTHLY" : lower.contains("week") ? "WEEKLY" : "DAILY";
             return answer(buildNarrative(period, Instant.now().minus(windowDays(period), ChronoUnit.DAYS), Instant.now()), "report", List.of());
         }
+        if (containsAny(lower, "workspace", "workspaces", "project", "projects", "list documents", "all documents", "what documents", "show documents", "overview")) {
+            return overviewAnswer();
+        }
         return retrieveAnswer(q);
+    }
+
+    public Map<String, Object> overviewAnswer() {
+        List<Workspace> workspaces = workspaceRepository.findAll();
+        List<Document> documents = documentRepository.findAll();
+        List<com.pusula.km.model.entity.FileAsset> files = fileAssetRepository.findAll();
+        StringBuilder sb = new StringBuilder("Pusula Vault Overview:\n");
+        sb.append("• Workspaces (").append(workspaces.size()).append("): ")
+          .append(workspaces.stream().map(Workspace::getName).collect(Collectors.joining(", "))).append("\n");
+        sb.append("• Documents (").append(documents.size()).append("): ")
+          .append(documents.stream().map(d -> d.getTitle() + " (v" + d.getCurrentVersion() + ")").collect(Collectors.joining(", "))).append("\n");
+        if (!files.isEmpty()) {
+            sb.append("• Uploaded files (").append(files.size()).append("): ")
+              .append(files.stream().map(com.pusula.km.model.entity.FileAsset::getFileName).collect(Collectors.joining(", "))).append("\n");
+        }
+        List<Map<String, Object>> sources = documents.stream().limit(5)
+                .map(d -> source(d, null, d.getTitle() + " - " + (d.getContentType() != null ? d.getContentType() : "Document")))
+                .toList();
+        return answer(sb.toString().trim(), "overview", sources);
     }
 
     @Transactional
@@ -290,7 +312,8 @@ public class VaultKnowledgeService {
             for (String line : lines(title + "\n" + body)) {
                 int score = score(line + " " + title, terms);
                 if (score > 0) {
-                    hits.add(new Scored(score + (title.toLowerCase(Locale.ROOT).contains(terms.get(0)) ? 2 : 0), document, latest, line));
+                    boolean titleHit = terms.stream().anyMatch(t -> title.toLowerCase(Locale.ROOT).contains(t));
+                    hits.add(new Scored(score + (titleHit ? 2 : 0), document, latest, line));
                 }
             }
         }
@@ -306,9 +329,10 @@ public class VaultKnowledgeService {
             for (String line : lines(name + "\n" + plain(content))) {
                 int score = score(line + " " + name, terms);
                 if (score > 0) {
+                    boolean nameHit = terms.stream().anyMatch(t -> name.toLowerCase(Locale.ROOT).contains(t));
                     Document dummy = fileAsset.getDocument() != null ? fileAsset.getDocument() :
                             Document.builder().id(fileAsset.getId()).title(name).build();
-                    hits.add(new Scored(score + (name.toLowerCase(Locale.ROOT).contains(terms.get(0)) ? 2 : 0), dummy, null, line));
+                    hits.add(new Scored(score + (nameHit ? 2 : 0), dummy, null, line));
                 }
             }
         }

@@ -68,17 +68,22 @@ public class DocumentController {
 
     @GetMapping
     public ResponseEntity<ApiResponse<PaginatedResponse<DocumentResponse>>> getDocuments(
-            @RequestParam UUID workspaceId,
+            @RequestParam(required = false) UUID workspaceId,
             @RequestParam(required = false) UUID folderId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         Pageable pageable = PageRequest.of(page, size);
-        accessScopeService.assertCanView(accessScopeService.requireUser(), workspaceId);
+        com.pusula.km.model.entity.User user = accessScopeService.requireUser();
         Page<Document> docPage;
-        if (folderId != null) {
-            docPage = documentRepository.findByWorkspaceIdAndFolderId(workspaceId, folderId, pageable);
+        if (workspaceId != null) {
+            accessScopeService.assertCanView(user, workspaceId);
+            if (folderId != null) {
+                docPage = documentRepository.findByWorkspaceIdAndFolderId(workspaceId, folderId, pageable);
+            } else {
+                docPage = documentRepository.findByWorkspaceId(workspaceId, pageable);
+            }
         } else {
-            docPage = documentRepository.findByWorkspaceId(workspaceId, pageable);
+            docPage = documentRepository.findAll(pageable);
         }
         List<DocumentResponse> content = docPage.getContent().stream().map(documentMapper::toResponse).toList();
         PaginatedResponse<DocumentResponse> paginated = new PaginatedResponse<>(
