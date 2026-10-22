@@ -26,6 +26,9 @@ import java.util.List;
 @EnableMethodSecurity
 public class SecurityAutoConfig {
 
+    private final CorsProperties corsProperties;
+    private final JwtTokenFilter jwtTokenFilter;
+    private final LoginRateLimitFilter loginRateLimitFilter;
     private final CustomUserDetailsService customUserDetailsService;
 
     public SecurityAutoConfig(CorsProperties corsProperties, JwtTokenFilter jwtTokenFilter, LoginRateLimitFilter loginRateLimitFilter, CustomUserDetailsService customUserDetailsService) {
@@ -33,6 +36,11 @@ public class SecurityAutoConfig {
         this.jwtTokenFilter = jwtTokenFilter;
         this.loginRateLimitFilter = loginRateLimitFilter;
         this.customUserDetailsService = customUserDetailsService;
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
     }
 
     @Bean
