@@ -26,22 +26,25 @@ import java.util.List;
 @EnableMethodSecurity
 public class SecurityAutoConfig {
 
-    private final CorsProperties corsProperties;
-    private final JwtTokenFilter jwtTokenFilter;
-    private final LoginRateLimitFilter loginRateLimitFilter;
+    private final CustomUserDetailsService customUserDetailsService;
 
-    public SecurityAutoConfig(CorsProperties corsProperties, JwtTokenFilter jwtTokenFilter, LoginRateLimitFilter loginRateLimitFilter) {
+    public SecurityAutoConfig(CorsProperties corsProperties, JwtTokenFilter jwtTokenFilter, LoginRateLimitFilter loginRateLimitFilter, CustomUserDetailsService customUserDetailsService) {
         this.corsProperties = corsProperties;
         this.jwtTokenFilter = jwtTokenFilter;
         this.loginRateLimitFilter = loginRateLimitFilter;
+        this.customUserDetailsService = customUserDetailsService;
     }
 
     @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
+    public DaoAuthenticationProvider daoAuthenticationProvider() {
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
+        provider.setUserDetailsService(customUserDetailsService);
+        provider.setPasswordEncoder(passwordEncoder());
+        return provider;
     }
 
     @Bean
+    @Override
     public AuthenticationManager authenticationManager(AuthenticationConfiguration authConfig) throws Exception {
         return authConfig.getAuthenticationManager();
     }
