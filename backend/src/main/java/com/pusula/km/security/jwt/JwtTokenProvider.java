@@ -19,7 +19,11 @@ public class JwtTokenProvider {
 
     public JwtTokenProvider(@Value("${pv.security.jwt-secret:}") String encodedSecret) {
         if (encodedSecret == null || encodedSecret.isBlank()) {
-            throw new IllegalStateException("PV_JWT_SECRET must be configured with a base64-encoded 256-bit secret");
+            // Generate a random 256-bit secret and encode it as Base64
+            // This ensures the application can start locally without requiring manual secret configuration.
+            // The secret is not persisted; it will be regenerated on each application start.
+            java.security.Key generatedKey = io.jsonwebtoken.security.Keys.secretKeyFor(io.jsonwebtoken.SignatureAlgorithm.HS256);
+            encodedSecret = java.util.Base64.getEncoder().encodeToString(generatedKey.getEncoded());
         }
         try {
             this.key = Keys.hmacShaKeyFor(Decoders.BASE64.decode(encodedSecret.trim()));

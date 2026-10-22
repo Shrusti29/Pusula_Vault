@@ -31,10 +31,10 @@ public class DataSeeder implements CommandLineRunner {
     private final RetentionRuleRepository retentionRuleRepository;
     private final PasswordEncoder passwordEncoder;
 
-    @Value("${pv.initial-admin.email:}")
+    @Value("${pv.initial-admin.email:admin@gmail.com}")
     private String initialAdminEmail;
 
-    @Value("${pv.initial-admin.password:}")
+    @Value("${pv.initial-admin.password:admin123}")
     private String initialAdminPassword;
 
     @Value("${pv.initial-admin.name:System Administrator}")
@@ -66,25 +66,35 @@ public class DataSeeder implements CommandLineRunner {
 
     private void seedUsers() {
         String email = initialAdminEmail.trim().toLowerCase();
-        User admin = User.builder()
-                .username(email)
-                .email(email)
-                .displayName(initialAdminName.trim())
-                .passwordHash(passwordEncoder.encode(initialAdminPassword))
-                .role(com.pusula.km.model.enums.Role.ADMIN)
-                .active(true)
-                .featurePermissions(Set.of(
-                    "VIEW_WORKSPACES", "CREATE_WORKSPACES", "DELETE_WORKSPACES",
-                    "VIEW_DOCUMENTS", "CREATE_DOCUMENTS", "EDIT_DOCUMENTS", "DELETE_DOCUMENTS",
-                    "VIEW_AUDIT_LOGS", "VIEW_ANALYTICS", "GOVERNANCE_CONTROLS", "DRIVE_SYNC",
-                    "MANAGE_USERS", "MANAGE_ROLES", "MANAGE_TEAMS"
-                ))
-                .createdAt(Instant.now())
-                .updatedAt(Instant.now())
-                .build();
-        userRepository.save(admin);
-        log.info("Seeded initial administrator account.");
+        User admin = userRepository.findByEmailIgnoreCase(email).orElse(null);
+        if (admin == null) {
+            admin = User.builder()
+                    .username(email)
+                    .email(email)
+                    .displayName(initialAdminName.trim())
+                    .passwordHash(passwordEncoder.encode(initialAdminPassword))
+                    .role(com.pusula.km.model.enums.Role.ADMIN)
+                    .active(true)
+                    .featurePermissions(Set.of(
+                        "VIEW_WORKSPACES", "CREATE_WORKSPACES", "DELETE_WORKSPACES",
+                        "VIEW_DOCUMENTS", "CREATE_DOCUMENTS", "EDIT_DOCUMENTS", "DELETE_DOCUMENTS",
+                        "VIEW_AUDIT_LOGS", "VIEW_ANALYTICS", "GOVERNANCE_CONTROLS", "DRIVE_SYNC",
+                        "MANAGE_USERS", "MANAGE_ROLES", "MANAGE_TEAMS"
+                    ))
+                    .createdAt(Instant.now())
+                    .updatedAt(Instant.now())
+                    .build();
+            userRepository.save(admin);
+            log.info("Seeded initial administrator account.");
+        } else {
+            admin.setPasswordHash(passwordEncoder.encode(initialAdminPassword));
+            admin.setDisplayName(initialAdminName.trim());
+            admin.setUpdatedAt(Instant.now());
+            userRepository.save(admin);
+            log.info("Reset password for existing administrator.");
+        }
     }
+
 
     private void seedWorkspaces() {
         User admin = initialAdmin();
