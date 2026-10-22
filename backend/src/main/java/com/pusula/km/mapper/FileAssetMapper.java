@@ -17,13 +17,13 @@ public class FileAssetMapper {
 
     public FileAssetResponse toResponse(FileAsset a) {
         if (a == null) return null;
-        UUID workspaceId = null;
-        UUID folderId = null;
+        UUID workspaceId = a.getWorkspace() != null ? a.getWorkspace().getId() : null;
+        UUID folderId = a.getFolder() != null ? a.getFolder().getId() : null;
         if (a.getDocument() != null) {
-            if (a.getDocument().getWorkspace() != null) {
+            if (workspaceId == null && a.getDocument().getWorkspace() != null) {
                 workspaceId = a.getDocument().getWorkspace().getId();
             }
-            if (a.getDocument().getFolder() != null) {
+            if (folderId == null && a.getDocument().getFolder() != null) {
                 folderId = a.getDocument().getFolder().getId();
             }
         }

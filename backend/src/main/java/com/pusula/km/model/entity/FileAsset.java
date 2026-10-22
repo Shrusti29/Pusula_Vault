@@ -28,6 +28,14 @@ public class FileAsset {
     @JoinColumn(name = "document_id")
     private Document document;
 
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "workspace_id")
+    private Workspace workspace;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "folder_id")
+    private Folder folder;
+
     @Column(nullable = false)
     private String fileName;
 
