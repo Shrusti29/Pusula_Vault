@@ -53,6 +53,12 @@ public class VaultKnowledgeService {
     private final AuditLogRepository auditLogRepository;
     private final WorkPresenceRepository workPresenceRepository;
     private final ProgressReportRepository progressReportRepository;
+    private final com.pusula.km.repository.FileAssetRepository fileAssetRepository;
+    private final com.pusula.km.storage.StorageService storageService;
+
+    public User requireUser() {
+        return accessScopeService.requireUser();
+    }
 
     public User requireLeadership() {
         User user = accessScopeService.requireUser();
@@ -63,10 +69,10 @@ public class VaultKnowledgeService {
     }
 
     public Map<String, Object> ask(String question) {
-        requireLeadership();
+        requireUser();
         String q = question == null ? "" : question.trim();
         if (q.isBlank()) {
-            return answer("Ask about a document, a version change, who is working, or a daily report.", "empty", List.of());
+            return answer("Ask about a document, an uploaded file, a version change, who is working, or a project report.", "empty", List.of());
         }
         String lower = q.toLowerCase(Locale.ROOT);
         if (containsAny(lower, "who is working", "who is active", "currently working", "active now", "who is online")) {
@@ -99,7 +105,7 @@ public class VaultKnowledgeService {
     }
 
     public List<Map<String, Object>> activePeople() {
-        requireLeadership();
+        requireUser();
         Instant cutoff = Instant.now().minusSeconds(45);
         List<Map<String, Object>> rows = new ArrayList<>();
         for (WorkPresence presence : workPresenceRepository.findAll()) {
@@ -120,7 +126,7 @@ public class VaultKnowledgeService {
     }
 
     public List<Map<String, Object>> recentActions(int limit) {
-        requireLeadership();
+        requireUser();
         List<AuditLog> logs = new ArrayList<>(auditLogRepository.findAll());
         logs.sort(Comparator.comparing(AuditLog::getTimestamp, Comparator.nullsLast(Comparator.reverseOrder())));
         return logs.stream().limit(Math.min(limit, 200)).map(this::actionRow).toList();
@@ -168,7 +174,7 @@ public class VaultKnowledgeService {
 
     @Transactional
     public ProgressReport saveReport(String period, String notes) {
-        User author = requireLeadership();
+        User author = requireUser();
         String normalized = period == null ? "DAILY" : period.toUpperCase(Locale.ROOT);
         Instant end = Instant.now();
         Instant start = end.minus(windowDays(normalized), ChronoUnit.DAYS);
@@ -185,7 +191,7 @@ public class VaultKnowledgeService {
     }
 
     public List<Map<String, Object>> projectStats() {
-        requireLeadership();
+        requireUser();
         Instant since = LocalDate.now(ZoneOffset.UTC).minusDays(30).atStartOfDay().toInstant(ZoneOffset.UTC);
         List<AuditLog> logs = auditLogRepository.findByTimestampBetween(since, Instant.now(), PageRequest.of(0, 1000)).getContent();
         List<Map<String, Object>> stats = new ArrayList<>();
@@ -288,9 +294,27 @@ public class VaultKnowledgeService {
                 }
             }
         }
+        for (com.pusula.km.model.entity.FileAsset fileAsset : fileAssetRepository.findAll()) {
+            String name = fileAsset.getFileName() != null ? fileAsset.getFileName() : "";
+            String ext = fileAsset.getFileType() != null ? fileAsset.getFileType().toLowerCase(Locale.ROOT) : "";
+            String content = "";
+            if (List.of("txt", "md", "csv", "json").contains(ext)) {
+                try (java.io.InputStream is = storageService.load(fileAsset.getStorageKey())) {
+                    content = new String(is.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+                } catch (Exception ignored) {}
+            }
+            for (String line : lines(name + "\n" + plain(content))) {
+                int score = score(line + " " + name, terms);
+                if (score > 0) {
+                    Document dummy = fileAsset.getDocument() != null ? fileAsset.getDocument() :
+                            Document.builder().id(fileAsset.getId()).title(name).build();
+                    hits.add(new Scored(score + (name.toLowerCase(Locale.ROOT).contains(terms.get(0)) ? 2 : 0), dummy, null, line));
+                }
+            }
+        }
         hits.sort(Comparator.comparingInt((Scored hit) -> hit.score).reversed());
         if (hits.isEmpty()) {
-            return answer("I could not find that wording in any stored document. Try a title, a project name, or a phrase that appears in the text.", "retrieve", List.of());
+            return answer("I could not find that wording in any stored document or uploaded file. Try searching for a specific topic, keyword, or document name.", "retrieve", List.of());
         }
         List<Scored> top = hits.stream().limit(5).toList();
         StringBuilder answer = new StringBuilder("From the vault:\n");

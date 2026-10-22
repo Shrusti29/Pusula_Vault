@@ -58,7 +58,7 @@ public class VaultController {
 
     @GetMapping("/reports")
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> reports() {
-        knowledgeService.requireLeadership();
+        knowledgeService.requireUser();
         List<Map<String, Object>> rows = progressReportRepository.findAllByOrderByCreatedAtDesc().stream().map(this::reportRow).toList();
         return ResponseEntity.ok(ApiResponse.success(rows, "Reports"));
     }

@@ -1,5 +1,6 @@
 import { Component, signal, inject, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { Router, RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from './core/auth/auth.service';
 import { ApiService } from './core/services/api.service';
@@ -9,7 +10,7 @@ import { DrmWatermarkComponent } from './shared/components/drm-watermark.compone
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive, GlobalSearchComponent, DrmWatermarkComponent],
+  imports: [CommonModule, FormsModule, RouterOutlet, RouterLink, RouterLinkActive, GlobalSearchComponent, DrmWatermarkComponent],
   host: {
     '(contextmenu)': 'preventContextMenu($event)',
     '(selectstart)': 'preventSelection($event)',
@@ -149,7 +150,7 @@ import { DrmWatermarkComponent } from './shared/components/drm-watermark.compone
               </div>
               <div class="nav-section">
                 <span class="nav-label" [class.hidden]="isSidebarCollapsed()">Intelligence</span>
-                <a routerLink="/desk" routerLinkActive="active" class="nav-item" *ngIf="authService.isLeadership()">
+                <a routerLink="/desk" routerLinkActive="active" class="nav-item">
                   <span class="nav-icon">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z"/>
@@ -160,7 +161,7 @@ import { DrmWatermarkComponent } from './shared/components/drm-watermark.compone
                   <span class="nav-text">Vault assistant</span>
                   <span class="nav-indicator-new" [class.hidden]="isSidebarCollapsed()">NEW</span>
                 </a>
-                <a routerLink="/analytics" routerLinkActive="active" class="nav-item" *ngIf="!authService.isRestricted()">
+                <a routerLink="/analytics" routerLinkActive="active" class="nav-item">
                   <span class="nav-icon">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
@@ -168,7 +169,7 @@ import { DrmWatermarkComponent } from './shared/components/drm-watermark.compone
                   </span>
                   <span class="nav-text">Analytics</span>
                 </a>
-                <a routerLink="/audit" routerLinkActive="active" class="nav-item" *ngIf="!authService.isRestricted()">
+                <a routerLink="/audit" routerLinkActive="active" class="nav-item">
                   <span class="nav-icon">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
@@ -176,7 +177,7 @@ import { DrmWatermarkComponent } from './shared/components/drm-watermark.compone
                   </span>
                   <span class="nav-text">Audit Logs</span>
                 </a>
-                <a routerLink="/governance" routerLinkActive="active" class="nav-item" *ngIf="!authService.isRestricted()">
+                <a routerLink="/governance" routerLinkActive="active" class="nav-item">
                   <span class="nav-icon">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
@@ -249,31 +250,66 @@ import { DrmWatermarkComponent } from './shared/components/drm-watermark.compone
                 <div class="drawer-body">
                   @if (aiTab() === 'chat') {
                     <div class="chat-messages">
-                      <div class="chat-message ai fade-in">
-                        <div class="chat-avatar ai">✨</div>
-                        <div class="chat-bubble ai">
-                          Hello! I'm your Pusula Knowledge AI. I can answer questions grounded in documents you have access to, generate summaries, and humanize your writing.
+                      @for (msg of aiMessages(); track msg.text + $index) {
+                        <div class="chat-message" [class.ai]="msg.role === 'ai'" [class.user]="msg.role === 'user'">
+                          <div class="chat-avatar" [class.ai]="msg.role === 'ai'" [class.user]="msg.role === 'user'">
+                            {{ msg.role === 'ai' ? '✨' : initials }}
+                          </div>
+                          <div class="chat-bubble" [class.ai]="msg.role === 'ai'" [class.user]="msg.role === 'user'">
+                            <p style="margin: 0; white-space: pre-wrap;">{{ msg.text }}</p>
+                            @if (msg.sources?.length) {
+                              <div class="citation-badges" style="margin-top: 0.5rem; display: flex; flex-wrap: wrap; gap: 0.35rem;">
+                                @for (s of msg.sources; track s.title + $index) {
+                                  <a [routerLink]="['/document', s.documentId]" class="pv-badge pv-badge-blue" style="text-decoration: none; font-size: 0.7rem;">
+                                    📄 {{ s.title }}
+                                  </a>
+                                }
+                              </div>
+                            }
+                          </div>
                         </div>
-                      </div>
+                      }
+                      @if (aiLoading()) {
+                        <div class="chat-message ai">
+                          <div class="chat-avatar ai">✨</div>
+                          <div class="chat-bubble ai">
+                            <span class="pulsing-dots">Searching vault knowledge...</span>
+                          </div>
+                        </div>
+                      }
                     </div>
                   }
                   @if (aiTab() === 'summary') {
                     <div class="pv-card fade-in">
                       <div class="pv-card-body">
                         <h4 style="margin-bottom: 0.75rem;">Executive Summary</h4>
-                        <p class="muted-text" style="font-size: 0.85rem;">Open a document and click Summarize to generate an executive brief with key points and action items.</p>
+                        <p class="muted-text" style="font-size: 0.85rem;">Instant intelligent summary across your workspace documents:</p>
+                        <button class="pv-btn pv-btn-outline" style="margin-top: 0.5rem; width: 100%;" (click)="askVaultAi('Summarise the work done today')">Generate Today's Brief</button>
                       </div>
                     </div>
                   }
                   @if (aiTab() === 'citations') {
                     <div class="citation-list">
-                      <p class="muted-text" style="font-size: 0.85rem;">Citations will appear here when AI answers reference documents.</p>
+                      @if (aiCitations().length) {
+                        @for (c of aiCitations(); track c.title + $index) {
+                          <div class="pv-card" style="margin-bottom: 0.5rem;">
+                            <div class="pv-card-body" style="padding: 0.75rem;">
+                              <a [routerLink]="['/document', c.documentId]" style="font-weight: 600; color: var(--pv-accent-blue); text-decoration: none; font-size: 0.85rem;">
+                                📄 {{ c.title }}
+                              </a>
+                              <p style="font-size: 0.78rem; color: var(--pv-text-secondary); margin: 0.25rem 0 0 0;">{{ c.excerpt }}</p>
+                            </div>
+                          </div>
+                        }
+                      } @else {
+                        <p class="muted-text" style="font-size: 0.85rem;">Citations will appear here when AI answers reference documents.</p>
+                      }
                     </div>
                   }
                 </div>
                 <div class="drawer-footer">
-                  <input type="text" class="pv-input" placeholder="Ask your knowledge vault..." />
-                  <button class="pv-btn pv-btn-primary" style="padding: 0.5rem 1rem;">
+                  <input type="text" class="pv-input" [(ngModel)]="aiInputQuery" (keydown.enter)="sendAiMessage()" placeholder="Ask your knowledge vault..." [disabled]="aiLoading()" />
+                  <button class="pv-btn pv-btn-primary" style="padding: 0.5rem 1rem;" (click)="sendAiMessage()" [disabled]="aiLoading() || !aiInputQuery.trim()">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
                     </svg>
@@ -624,6 +660,15 @@ export class AppComponent {
   searchOverlayOpen = signal(false);
   showUserMenu = signal(false);
   aiTab = signal<'chat'|'summary'|'citations'>('chat');
+  aiInputQuery = '';
+  aiLoading = signal(false);
+  aiMessages = signal<{ role: 'ai' | 'user'; text: string; sources?: { documentId: string; title: string; excerpt: string }[] }[]>([
+    {
+      role: 'ai',
+      text: "Hello! I'm your Pusula Knowledge AI. I'm connected dynamically to all documents and files in your vault. Ask me anything!"
+    }
+  ]);
+  aiCitations = signal<{ documentId: string; title: string; excerpt: string }[]>([]);
 
   workspaces = [
     { id: 'ws-alpha', name: 'Project Alpha' },
@@ -634,6 +679,34 @@ export class AppComponent {
 
   captureShield = signal(false);
   private api = inject(ApiService);
+
+  sendAiMessage() {
+    const q = this.aiInputQuery.trim();
+    if (!q) return;
+    this.aiInputQuery = '';
+    this.askVaultAi(q);
+  }
+
+  askVaultAi(question: string) {
+    this.aiMessages.update(msgs => [...msgs, { role: 'user', text: question }]);
+    this.aiLoading.set(true);
+    this.api.post<{ answer: string; sources: { documentId: string; title: string; excerpt: string }[] }>('/vault/ask', { question }).subscribe({
+      next: (res: any) => {
+        this.aiLoading.set(false);
+        const data = res?.data || res;
+        const answer = data?.answer || 'No information found.';
+        const sources = data?.sources || [];
+        this.aiMessages.update(msgs => [...msgs, { role: 'ai', text: answer, sources }]);
+        if (sources.length) {
+          this.aiCitations.set(sources);
+        }
+      },
+      error: (err: any) => {
+        this.aiLoading.set(false);
+        this.aiMessages.update(msgs => [...msgs, { role: 'ai', text: err?.error?.message || err?.message || 'Failed to query Knowledge AI.' }]);
+      }
+    });
+  }
 
   get showAdminNav(): boolean {
     const r = this.authService.currentUser()?.role;
