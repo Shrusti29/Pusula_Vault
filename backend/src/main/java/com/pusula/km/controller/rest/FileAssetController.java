@@ -118,7 +118,7 @@ public class FileAssetController {
                         .status(com.pusula.km.model.enums.DocumentStatus.ACTIVE)
                         .sensitivityLevel(com.pusula.km.model.enums.SensitivityLevel.INTERNAL)
                         .createdBy(user)
-                        .lastModifiedBy(user)
+                        .updatedBy(user)
                         .build();
 
                 doc = documentRepository.save(newDoc);
@@ -127,17 +127,10 @@ public class FileAssetController {
                         .document(doc)
                         .versionNumber(1)
                         .content(docContent)
-                        .title(doc.getTitle())
                         .changeSummary("Initial upload of " + originalFilename)
                         .createdBy(user)
                         .build();
                 documentVersionRepository.save(v1);
-
-                try {
-                    int count = documentRepository.countByWorkspaceIdAndStatusNot(ws.getId(), com.pusula.km.model.enums.DocumentStatus.ARCHIVED);
-                    ws.setDocumentCount(count);
-                    workspaceRepository.save(ws);
-                } catch (Exception ignored) {}
 
                 if (user != null) {
                     auditService.log(user.getId(), user.getRole(), com.pusula.km.model.enums.AuditAction.DOCUMENT_CREATED,
