@@ -150,19 +150,22 @@ interface ReportRow { id: string; period: string; generatedSummary: string; auth
     .desk-head p { color: var(--pv-text-muted); max-width: 640px; }
     .tabs { display: flex; gap: 0.4rem; margin-bottom: 1rem; }
     .tabs button { border: 1px solid var(--pv-border); background: transparent; color: inherit; border-radius: 999px; padding: 0.45rem 0.9rem; cursor: pointer; }
-    .tabs button.on { background: #0f172a; color: white; }
+    .tabs button.on { background: var(--pv-accent-primary); color: #ffffff; }
     .panel, .chat { background: var(--pv-bg-card); border: 1px solid var(--pv-border); border-radius: 16px; padding: 1rem; }
     .split { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
     .thread { min-height: 280px; max-height: 460px; overflow: auto; display: flex; flex-direction: column; gap: 0.7rem; }
-    article { border-radius: 12px; padding: 0.8rem 1rem; background: #f8fafc; }
-    article.you { background: #0f172a; color: white; }
+    article { border-radius: 12px; padding: 0.8rem 1rem; background: #f8fafc; color: #0f172a !important; }
+    article * { color: #0f172a !important; }
+    article.you { background: #1e293b; color: #ffffff !important; }
+    article.you * { color: #ffffff !important; }
     article p, .person p, .action p { white-space: pre-wrap; margin: 0.25rem 0 0; }
     form { display: flex; gap: 0.5rem; margin-top: 0.8rem; }
-    input, select, textarea { width: 100%; border: 1px solid var(--pv-border); border-radius: 10px; padding: 0.7rem; font: inherit; background: white; }
+    input, select, textarea { width: 100%; border: 1px solid var(--pv-border); border-radius: 10px; padding: 0.7rem; font: inherit; background: var(--pv-bg-dark); color: #ffffff; }
+    input::placeholder, textarea::placeholder { color: #94a3b8; }
     .prompts { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.7rem; }
-    .prompts button { border: 0; background: #f1f5f9; border-radius: 999px; padding: 0.35rem 0.7rem; cursor: pointer; }
+    .prompts button { border: 0; background: #e2e8f0; color: #0f172a !important; font-weight: 500; border-radius: 999px; padding: 0.35rem 0.7rem; cursor: pointer; }
     .sources { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
-    .sources a { color: inherit; font-size: 0.85rem; }
+    .sources a { color: var(--pv-accent-primary-hover); font-size: 0.85rem; }
     .person, .action { display: flex; gap: 0.7rem; align-items: center; padding: 0.7rem 0; border-bottom: 1px solid var(--pv-border); }
     .person em, time { margin-left: auto; color: var(--pv-text-muted); font-style: normal; font-size: 0.85rem; }
     .dot { width: 10px; height: 10px; border-radius: 50%; background: #cbd5e1; }
@@ -173,7 +176,8 @@ interface ReportRow { id: string; period: string; generatedSummary: string; auth
     pre { white-space: pre-wrap; font-family: inherit; font-size: 0.92rem; }
     .report { border-top: 1px solid var(--pv-border); padding-top: 0.8rem; margin-top: 0.8rem; }
     .report header, .note { display: flex; justify-content: space-between; }
-    .note { background: #fff7ed; padding: 0.5rem 0.7rem; border-radius: 8px; }
+    .note { background: #fef3c7; color: #78350f !important; padding: 0.5rem 0.7rem; border-radius: 8px; font-weight: 500; }
+    .note * { color: #78350f !important; }
     .project { display: grid; grid-template-columns: 160px 1fr; gap: 1rem; padding: 0.8rem 0; border-bottom: 1px solid var(--pv-border); }
     .bars div { display: grid; grid-template-columns: 90px 1fr 32px; gap: 0.4rem; align-items: center; margin: 0.25rem 0; font-size: 0.85rem; }
     .bars i { display: block; height: 8px; background: #0284c7; border-radius: 99px; min-width: 4px; }
