@@ -60,13 +60,13 @@ export const MAX_SIZE_BYTES = 100 * 1024 * 1024;
       <div class="attach-options" *ngIf="workspaces().length">
         <div class="opt-row">
           <label class="opt-label">Workspace</label>
-          <select class="pv-select" [(ngModel)]="attachWorkspaceId" (change)="refreshFolders()">
+          <select class="pv-select" [ngModel]="attachWorkspaceId()" (ngModelChange)="setAttachWorkspaceId($event)">
             <option *ngFor="let w of workspaces()" [value]="w.id">{{ w.name }}</option>
           </select>
         </div>
         <div class="opt-row" *ngIf="folders().length">
           <label class="opt-label">Folder</label>
-          <select class="pv-select" [(ngModel)]="attachFolderId">
+          <select class="pv-select" [ngModel]="attachFolderId()" (ngModelChange)="attachFolderId.set($event)">
             <option [value]="''">— Root —</option>
             <option *ngFor="let f of folders()" [value]="f.id">{{ f.name }}</option>
           </select>
@@ -224,6 +224,11 @@ export class FileUploadComponent implements OnInit, OnDestroy {
       window.clearInterval(this.processingTimer);
       this.processingTimer = null;
     }
+  }
+
+  setAttachWorkspaceId(id: string): void {
+    this.attachWorkspaceId.set(id);
+    this.refreshFolders();
   }
 
   refreshFolders(): void {
