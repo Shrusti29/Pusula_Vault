@@ -515,17 +515,19 @@ export class AnalyticsComponent implements OnInit {
   };
 
   readonly kpiTiles = computed<KpiTile[]>(() => {
-    const o = this.overview();
-    const gb = o ? (o.storageUsedBytes / 1_000_000_000) : 0;
+    const o = this.overview() as any;
+    const bytes = o?.storageUsedBytes ?? o?.storage_used_bytes ?? 0;
+    const gb = bytes / 1_000_000_000;
+    const num = (v: any) => typeof v === 'number' ? v.toLocaleString() : (v != null ? Number(v).toLocaleString() : '0');
     return [
-      { key: 'totalUsers', label: 'Total Users', value: o?.totalUsers.toLocaleString() ?? '—', icon: '👥', accent: 'var(--pv-accent-blue)' },
-      { key: 'totalDocuments', label: 'Documents', value: o?.totalDocuments.toLocaleString() ?? '—', icon: '📄', accent: 'var(--pv-accent-teal)' },
-      { key: 'totalFiles', label: 'Files', value: o?.totalFiles.toLocaleString() ?? '—', icon: '📎', accent: 'var(--pv-accent-amber)' },
+      { key: 'totalUsers', label: 'Total Users', value: o ? num(o.totalUsers ?? o.total_users) : '—', icon: '👥', accent: 'var(--pv-accent-blue)' },
+      { key: 'totalDocuments', label: 'Documents', value: o ? num(o.totalDocuments ?? o.total_documents) : '—', icon: '📄', accent: 'var(--pv-accent-teal)' },
+      { key: 'totalFiles', label: 'Files', value: o ? num(o.totalFiles ?? o.total_files) : '—', icon: '📎', accent: 'var(--pv-accent-amber)' },
       { key: 'storageUsedGB', label: 'Storage (GB)', value: o ? gb.toFixed(2) : '—', icon: '💾', accent: 'var(--pv-accent-purple)' },
-      { key: 'docsCreatedToday', label: 'Created Today', value: o?.docsCreatedToday.toLocaleString() ?? '—', delta: '+new', icon: '✨', accent: 'var(--pv-accent-blue)' },
-      { key: 'docsModifiedToday', label: 'Modified Today', value: o?.docsModifiedToday.toLocaleString() ?? '—', icon: '✏️', accent: 'var(--pv-accent-amber)' },
-      { key: 'aiInteractionsLast7d', label: 'AI Interactions (7d)', value: o?.aiInteractionsLast7d.toLocaleString() ?? '—', icon: '🤖', accent: 'var(--pv-accent-purple)' },
-      { key: 'activeUsersLast7d', label: 'Active Users (7d)', value: o?.activeUsersLast7d.toLocaleString() ?? '—', icon: '⚡', accent: 'var(--pv-accent-teal)' }
+      { key: 'docsCreatedToday', label: 'Created Today', value: o ? num(o.docsCreatedToday ?? o.docs_created_today) : '—', delta: '+new', icon: '✨', accent: 'var(--pv-accent-blue)' },
+      { key: 'docsModifiedToday', label: 'Modified Today', value: o ? num(o.docsModifiedToday ?? o.docs_modified_today) : '—', icon: '✏️', accent: 'var(--pv-accent-amber)' },
+      { key: 'aiInteractionsLast7d', label: 'AI Interactions (7d)', value: o ? num(o.aiInteractionsLast7d ?? o.ai_interactions_last7d) : '—', icon: '🤖', accent: 'var(--pv-accent-purple)' },
+      { key: 'activeUsersLast7d', label: 'Active Users (7d)', value: o ? num(o.activeUsersLast7d ?? o.active_users_last7d) : '—', icon: '⚡', accent: 'var(--pv-accent-teal)' }
     ];
   });
 
@@ -712,16 +714,61 @@ export class AnalyticsComponent implements OnInit {
   }
 
   private refreshEdited(): void {
-    this.api.topEditedVersions(10).subscribe(v => this.topEditedVersions.set(v));
+    this.api.topEditedVersions(10).subscribe(v => {
+      const normalized = (v || []).map((item: any) => ({
+        documentId: item.documentId || item.document_id || '',
+        title: item.title || 'Untitled Document',
+        versionsCount: item.versionsCount ?? item.versions_count ?? 1,
+        lastEdited: item.lastEdited || item.last_edited || new Date().toISOString()
+      }));
+      this.topEditedVersions.set(normalized);
+    });
   }
 
   private refreshContributors(): void {
-    this.api.topContributors(10).subscribe(c => this.topContributors.set(c));
+    this.api.topContributors(10).subscribe(c => {
+      const normalized = (c || []).map((item: any) => ({
+        userId: item.userId || item.user_id || '',
+        fullName: item.fullName || item.full_name || 'User',
+        role: item.role || 'EMPLOYEE',
+        edits: item.edits ?? 0
+      }));
+      this.topContributors.set(normalized);
+    });
   }
 
   private refreshAccess(): void {
-    this.api.topGrantsLast30(10).subscribe(g => this.topGrants.set(g));
-    this.api.topDeniedLast30(10).subscribe(d => this.topDenied.set(d));
-    this.api.suspiciousAccess().subscribe(s => this.suspiciousAccess.set(s));
+    this.api.topGrantsLast30(10).subscribe(g => {
+      const normalized = (g || []).map((item: any) => ({
+        id: item.id || '',
+        granteeType: item.granteeType || item.grantee_type || 'USER',
+        granteeLabel: item.granteeLabel || item.grantee_label || 'User',
+        resourceLabel: item.resourceLabel || item.resource_label || 'Resource',
+        permissions: item.permissions || ['READ'],
+        grantedAt: item.grantedAt || item.granted_at || new Date().toISOString(),
+        grantedBy: item.grantedBy || item.granted_by || 'Admin'
+      }));
+      this.topGrants.set(normalized);
+    });
+    this.api.topDeniedLast30(10).subscribe(d => {
+      const normalized = (d || []).map((item: any) => ({
+        actorId: item.actorId || item.actor_id || '',
+        actorName: item.actorName || item.actor_name || 'User',
+        resourceLabel: item.resourceLabel || item.resource_label || 'Resource',
+        action: item.action || 'ACCESS_DENIED',
+        count: item.count ?? 1
+      }));
+      this.topDenied.set(normalized);
+    });
+    this.api.suspiciousAccess().subscribe(s => {
+      const normalized = (s || []).map((item: any) => ({
+        actorId: item.actorId || item.actor_id || '',
+        actorName: item.actorName || item.actor_name || 'User',
+        resourceLabel: item.resourceLabel || item.resource_label || 'Resource',
+        reason: item.reason || 'Security Notice',
+        at: item.at || new Date().toISOString()
+      }));
+      this.suspiciousAccess.set(normalized);
+    });
   }
 }
