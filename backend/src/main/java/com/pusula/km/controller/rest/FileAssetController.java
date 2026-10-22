@@ -33,6 +33,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import com.pusula.km.model.entity.Workspace;
+import com.pusula.km.model.entity.Folder;
+import com.pusula.km.repository.WorkspaceRepository;
+import com.pusula.km.repository.FolderRepository;
+
 @RestController
 @RequestMapping("/api/v1/files")
 @RequiredArgsConstructor
@@ -42,6 +47,8 @@ public class FileAssetController {
     private final FileAssetRepository fileAssetRepository;
     private final UserRepository userRepository;
     private final DocumentRepository documentRepository;
+    private final WorkspaceRepository workspaceRepository;
+    private final FolderRepository folderRepository;
     private final FileAssetMapper fileAssetMapper;
     private final AccessScopeService accessScopeService;
 
@@ -54,7 +61,7 @@ public class FileAssetController {
     @PostMapping("/upload")
     public ResponseEntity<ApiResponse<FileAssetResponse>> uploadFile(
             @RequestParam("file") MultipartFile file,
-            @RequestParam("workspaceId") UUID workspaceId,
+            @RequestParam(value = "workspaceId", required = false) UUID workspaceId,
             @RequestParam(value = "documentId", required = false) UUID documentId,
             @RequestParam(value = "folderId", required = false) UUID folderId,
             @RequestParam(defaultValue = "false") boolean encrypt) {
@@ -71,9 +78,13 @@ public class FileAssetController {
 
             User user = userRepository.findById(userId).orElse(null);
             Document doc = documentId != null ? documentRepository.findById(documentId).orElse(null) : null;
+            Workspace ws = workspaceId != null ? workspaceRepository.findById(workspaceId).orElse(null) : (doc != null ? doc.getWorkspace() : null);
+            Folder folder = folderId != null ? folderRepository.findById(folderId).orElse(null) : (doc != null ? doc.getFolder() : null);
 
             FileAsset asset = FileAsset.builder()
                     .document(doc)
+                    .workspace(ws)
+                    .folder(folder)
                     .fileName(originalFilename != null ? originalFilename : "unnamed")
                     .fileType(extension)
                     .mimeType(file.getContentType())
@@ -104,6 +115,14 @@ public class FileAssetController {
         List<FileAsset> filtered = new ArrayList<>();
         for (FileAsset a : all) {
             boolean match = true;
+            if (workspaceId != null) {
+                UUID aWsId = a.getWorkspace() != null ? a.getWorkspace().getId() : (a.getDocument() != null && a.getDocument().getWorkspace() != null ? a.getDocument().getWorkspace().getId() : null);
+                if (aWsId != null && !workspaceId.equals(aWsId)) match = false;
+            }
+            if (folderId != null) {
+                UUID aFolderId = a.getFolder() != null ? a.getFolder().getId() : (a.getDocument() != null && a.getDocument().getFolder() != null ? a.getDocument().getFolder().getId() : null);
+                if (aFolderId != null && !folderId.equals(aFolderId)) match = false;
+            }
             if (documentId != null) {
                 if (a.getDocument() == null || !documentId.equals(a.getDocument().getId())) match = false;
             }
