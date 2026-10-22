@@ -96,10 +96,10 @@ export class LoginComponent implements OnDestroy {
       next: (res) => {
         this.busy = false;
         const data = res.data;
-        if (!data) return;
-        if (data.deviceStatus === 'PENDING') {
+        const status = data.deviceStatus || (data as any).device_status;
+        if (status === 'PENDING') {
           this.isWaiting = true;
-          this.message = data.deviceMessage || 'Waiting for admin approval.';
+          this.message = data.deviceMessage || (data as any).device_message || 'Waiting for admin approval.';
           this.pendingToken = data.token || '';
           this.startPoll();
           return;

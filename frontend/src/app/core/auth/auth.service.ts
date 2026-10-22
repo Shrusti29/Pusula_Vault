@@ -45,14 +45,19 @@ export class AuthService {
   }
 
   login(credentials: { email: string; password: string }): Observable<ApiResponse<LoginResponse>> {
-    const loginRequest: LoginRequest = {
+    const devId = deviceId();
+    const label = navigator.userAgent.slice(0, 140);
+    const loginRequest: any = {
       email: credentials.email.trim().toLowerCase(),
       password: credentials.password,
-      deviceId: deviceId(),
-      deviceLabel: navigator.userAgent.slice(0, 140)
+      deviceId: devId,
+      device_id: devId,
+      deviceLabel: label,
+      device_label: label
     };
     return this.apiService.login(loginRequest).pipe(tap(res => {
-      if (res.success && res.data?.token && res.data.deviceStatus !== 'PENDING') {
+      const status = res.data?.deviceStatus || (res.data as any)?.device_status;
+      if (res.success && res.data?.token && status !== 'PENDING') {
         this.persist(res.data);
       }
     }));
