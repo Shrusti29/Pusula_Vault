@@ -47,10 +47,12 @@ public class FileAssetController {
     private final FileAssetRepository fileAssetRepository;
     private final UserRepository userRepository;
     private final DocumentRepository documentRepository;
+    private final com.pusula.km.repository.DocumentVersionRepository documentVersionRepository;
     private final WorkspaceRepository workspaceRepository;
     private final FolderRepository folderRepository;
     private final FileAssetMapper fileAssetMapper;
     private final AccessScopeService accessScopeService;
+    private final com.pusula.km.service.impl.AuditService auditService;
 
     private UUID currentUserId() {
         Object p = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
@@ -81,6 +83,68 @@ public class FileAssetController {
             Workspace ws = workspaceId != null ? workspaceRepository.findById(workspaceId).orElse(null) : (doc != null ? doc.getWorkspace() : null);
             Folder folder = folderId != null ? folderRepository.findById(folderId).orElse(null) : (doc != null ? doc.getFolder() : null);
 
+            if (doc == null && ws != null) {
+                com.pusula.km.model.enums.DocumentType docType;
+                String extLower = extension.toLowerCase();
+                if (extLower.equals("pdf")) {
+                    docType = com.pusula.km.model.enums.DocumentType.PDF;
+                } else if (extLower.equals("docx") || extLower.equals("doc")) {
+                    docType = com.pusula.km.model.enums.DocumentType.WORD;
+                } else if (extLower.equals("xlsx") || extLower.equals("xls") || extLower.equals("csv")) {
+                    docType = com.pusula.km.model.enums.DocumentType.EXCEL;
+                } else if (extLower.equals("pptx") || extLower.equals("ppt")) {
+                    docType = com.pusula.km.model.enums.DocumentType.POWERPOINT;
+                } else {
+                    docType = com.pusula.km.model.enums.DocumentType.TEXT;
+                }
+
+                String docContent = "Uploaded document: " + originalFilename;
+                if (file.getContentType() != null && (file.getContentType().startsWith("text/") || extLower.equals("txt") || extLower.equals("md") || extLower.equals("csv"))) {
+                    try {
+                        String text = new String(file.getBytes(), java.nio.charset.StandardCharsets.UTF_8);
+                        if (!text.isBlank()) {
+                            docContent = text;
+                        }
+                    } catch (Exception ignored) {}
+                }
+
+                Document newDoc = Document.builder()
+                        .title(originalFilename != null ? originalFilename : "Uploaded Document")
+                        .workspace(ws)
+                        .folder(folder)
+                        .documentType(docType)
+                        .contentType(file.getContentType() != null ? file.getContentType() : "application/octet-stream")
+                        .content(docContent)
+                        .status(com.pusula.km.model.enums.DocumentStatus.ACTIVE)
+                        .sensitivityLevel(com.pusula.km.model.enums.SensitivityLevel.INTERNAL)
+                        .createdBy(user)
+                        .lastModifiedBy(user)
+                        .build();
+
+                doc = documentRepository.save(newDoc);
+
+                com.pusula.km.model.entity.DocumentVersion v1 = com.pusula.km.model.entity.DocumentVersion.builder()
+                        .document(doc)
+                        .versionNumber(1)
+                        .content(docContent)
+                        .title(doc.getTitle())
+                        .changeSummary("Initial upload of " + originalFilename)
+                        .createdBy(user)
+                        .build();
+                documentVersionRepository.save(v1);
+
+                try {
+                    int count = documentRepository.countByWorkspaceIdAndStatusNot(ws.getId(), com.pusula.km.model.enums.DocumentStatus.ARCHIVED);
+                    ws.setDocumentCount(count);
+                    workspaceRepository.save(ws);
+                } catch (Exception ignored) {}
+
+                if (user != null) {
+                    auditService.log(user.getId(), user.getRole(), com.pusula.km.model.enums.AuditAction.DOCUMENT_CREATED,
+                            "Document", doc.getId().toString(), doc.getTitle(), "127.0.0.1", true, null, "Created via file upload");
+                }
+            }
+
             FileAsset asset = FileAsset.builder()
                     .document(doc)
                     .workspace(ws)
@@ -96,6 +160,12 @@ public class FileAssetController {
                     .build();
 
             FileAsset saved = fileAssetRepository.save(asset);
+
+            if (user != null) {
+                auditService.log(user.getId(), user.getRole(), com.pusula.km.model.enums.AuditAction.FILE_UPLOADED,
+                        "FileAsset", saved.getId().toString(), saved.getFileName(), "127.0.0.1", true, null, "Uploaded to workspace");
+            }
+
             return ResponseEntity.ok(ApiResponse.success(fileAssetMapper.toResponse(saved), "File uploaded successfully"));
         } catch (com.pusula.km.exception.ValidationException | StorageException e) {
             throw e;
