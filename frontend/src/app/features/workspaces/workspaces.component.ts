@@ -10,33 +10,42 @@ import { WorkspaceResponse, CreateWorkspaceRequest, UpdateWorkspaceRequest } fro
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <div class="workspaces-container" style="padding: 2rem;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-        <h1 style="font-size: 1.75rem; margin: 0;">Workspaces</h1>
-        <button class="btn-primary" (click)="showCreateModal.set(true)" style="padding: 0.75rem 1.5rem; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">
-          + New Workspace
+    <div class="workspaces-container">
+      <div class="workspaces-header">
+        <div>
+          <h1 class="page-title">Workspaces</h1>
+          <p class="page-subtitle">Organize documents, projects, and permissions across your organization</p>
+        </div>
+        <button class="pv-btn pv-btn-primary" (click)="showCreateModal.set(true)">
+          <span style="font-size: 1.1rem; margin-right: 0.35rem;">+</span> New Workspace
         </button>
       </div>
 
       @if (loading()) {
-        <div style="text-align: center; padding: 3rem; color: #666;">Loading workspaces...</div>
+        <div class="loading-state">Loading workspaces...</div>
       } @else if (workspaces().length === 0) {
-        <div style="text-align: center; padding: 3rem; color: #999;">
-          <p>No workspaces found. Create your first workspace to get started.</p>
+        <div class="empty-state-card pv-card">
+          <div class="empty-icon">🗂️</div>
+          <h3>No workspaces found</h3>
+          <p>Create your first workspace to start collaborating on documents.</p>
+          <button class="pv-btn pv-btn-primary" style="margin-top: 1rem;" (click)="showCreateModal.set(true)">Create Workspace</button>
         </div>
       } @else {
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem;">
+        <div class="workspaces-grid">
           @for (ws of workspaces(); track ws.id) {
-            <div class="workspace-card" [class.hovered]="hoveredWorkspaceId() === ws.id" (click)="viewWorkspace(ws.id)" (mouseenter)="hoveredWorkspaceId.set(ws.id)" (mouseleave)="hoveredWorkspaceId.set(null)">
-              <h3 style="margin: 0 0 0.5rem 0; font-size: 1.25rem; color: #333;">{{ ws.name }}</h3>
-              <p style="margin: 0 0 1rem 0; color: #666; font-size: 0.9rem;">{{ ws.description || 'No description' }}</p>
-              <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; color: #999;">
-                <span>{{ ws.documentCount || 0 }} documents</span>
-                <span>Created: {{ ws.createdAt | date:'shortDate' }}</span>
+            <div class="pv-card workspace-card" (click)="viewWorkspace(ws.id)">
+              <div class="ws-card-top">
+                <div class="ws-icon">🗂️</div>
+                <div class="ws-badge">{{ ws.documentCount || 0 }} docs</div>
               </div>
-              <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #f0f0f0; display: flex; gap: 0.5rem;">
-                <button class="btn-secondary" (click)="editWorkspace(ws, $event)" style="padding: 0.4rem 0.8rem; background: #f0f0f0; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">Edit</button>
-                <button class="btn-danger" (click)="deleteWorkspace(ws.id, $event)" style="padding: 0.4rem 0.8rem; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">Delete</button>
+              <h3 class="ws-name">{{ ws.name }}</h3>
+              <p class="ws-desc">{{ ws.description || 'No description provided' }}</p>
+              <div class="ws-meta">
+                <span>Created {{ ws.createdAt | date:'mediumDate' }}</span>
+              </div>
+              <div class="ws-actions" (click)="$event.stopPropagation()">
+                <button class="pv-btn pv-btn-outline xs-btn" (click)="editWorkspace(ws, $event)">Edit</button>
+                <button class="pv-btn pv-btn-ghost xs-btn danger-hover" (click)="deleteWorkspace(ws.id, $event)">Delete</button>
               </div>
             </div>
           }
@@ -44,21 +53,24 @@ import { WorkspaceResponse, CreateWorkspaceRequest, UpdateWorkspaceRequest } fro
       }
 
       @if (showCreateModal()) {
-        <div class="modal-overlay" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;">
-          <div class="modal-content" style="background: white; padding: 2rem; border-radius: 8px; width: 400px; max-width: 90%;">
-            <h2 style="margin: 0 0 1.5rem 0;">{{ editingWorkspace() ? 'Edit Workspace' : 'Create Workspace' }}</h2>
+        <div class="modal-backdrop" (click)="closeModal()">
+          <div class="modal-dialog pv-card" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+              <h2>{{ editingWorkspace() ? 'Edit Workspace' : 'Create Workspace' }}</h2>
+              <button class="close-btn" (click)="closeModal()">&times;</button>
+            </div>
             <form (ngSubmit)="saveWorkspace()">
-              <div class="form-group" style="margin-bottom: 1rem;">
-                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Name</label>
-                <input type="text" [(ngModel)]="workspaceForm().name" name="name" required style="width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px;" />
+              <div class="form-group">
+                <label class="pv-label">Workspace Name</label>
+                <input type="text" class="pv-input" [(ngModel)]="workspaceForm().name" name="name" required placeholder="e.g. Engineering, Sales, Strategy" />
               </div>
-              <div class="form-group" style="margin-bottom: 1.5rem;">
-                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Description</label>
-                <textarea [(ngModel)]="workspaceForm().description" name="description" rows="3" style="width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; resize: vertical;"></textarea>
+              <div class="form-group">
+                <label class="pv-label">Description</label>
+                <textarea class="pv-textarea" [(ngModel)]="workspaceForm().description" name="description" rows="3" placeholder="Brief description of this workspace's purpose..."></textarea>
               </div>
-              <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
-                <button type="button" (click)="closeModal()" style="padding: 0.5rem 1rem; background: #f0f0f0; border: none; border-radius: 4px; cursor: pointer;">Cancel</button>
-                <button type="submit" style="padding: 0.5rem 1rem; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">{{ editingWorkspace() ? 'Update' : 'Create' }}</button>
+              <div class="modal-footer">
+                <button type="button" class="pv-btn pv-btn-outline" (click)="closeModal()">Cancel</button>
+                <button type="submit" class="pv-btn pv-btn-primary">{{ editingWorkspace() ? 'Save Changes' : 'Create Workspace' }}</button>
               </div>
             </form>
           </div>
@@ -67,23 +79,168 @@ import { WorkspaceResponse, CreateWorkspaceRequest, UpdateWorkspaceRequest } fro
     </div>
   `,
   styles: [`
+    .workspaces-container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    .workspaces-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+    }
+    .page-title {
+      font-size: 1.85rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin: 0 0 0.25rem 0;
+      color: var(--pv-text-primary);
+    }
+    .page-subtitle {
+      color: var(--pv-text-muted);
+      font-size: 0.9rem;
+      margin: 0;
+    }
+    .loading-state {
+      text-align: center;
+      padding: 3rem;
+      color: var(--pv-text-muted);
+    }
+    .empty-state-card {
+      text-align: center;
+      padding: 3.5rem 2rem;
+      margin-top: 1rem;
+    }
+    .empty-icon {
+      font-size: 2.5rem;
+      margin-bottom: 1rem;
+    }
+    .empty-state-card h3 {
+      font-size: 1.25rem;
+      margin-bottom: 0.5rem;
+      color: var(--pv-text-primary);
+    }
+    .empty-state-card p {
+      color: var(--pv-text-muted);
+      font-size: 0.9rem;
+    }
+    .workspaces-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 1.5rem;
+    }
     .workspace-card {
-      background: white;
-      border: 1px solid #e0e0e0;
-      border-radius: 8px;
       padding: 1.5rem;
       cursor: pointer;
-      transition: box-shadow 0.2s, transform 0.2s;
+      display: flex;
+      flex-direction: column;
+      transition: all var(--pv-transition-fast);
+      position: relative;
     }
-    .workspace-card.hovered {
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    .workspace-card:hover {
+      border-color: var(--pv-accent-blue);
+      box-shadow: var(--pv-shadow-glow-blue);
       transform: translateY(-2px);
     }
-    .btn-secondary:hover {
-      background: #e0e0e0;
+    .ws-card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
     }
-    .btn-danger:hover {
-      background: #c82333;
+    .ws-icon {
+      font-size: 1.5rem;
+    }
+    .ws-badge {
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.2rem 0.6rem;
+      border-radius: 20px;
+      background: rgba(14, 165, 233, 0.12);
+      color: var(--pv-accent-blue);
+      border: 1px solid rgba(14, 165, 233, 0.25);
+    }
+    .ws-name {
+      margin: 0 0 0.5rem 0;
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: var(--pv-text-primary);
+    }
+    .ws-desc {
+      color: var(--pv-text-secondary);
+      font-size: 0.88rem;
+      line-height: 1.5;
+      margin: 0 0 1.25rem 0;
+      flex: 1;
+    }
+    .ws-meta {
+      font-size: 0.78rem;
+      color: var(--pv-text-subtle);
+      margin-bottom: 1rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid var(--pv-border);
+    }
+    .ws-actions {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: flex-end;
+    }
+    .xs-btn {
+      padding: 0.35rem 0.75rem;
+      font-size: 0.78rem;
+    }
+    .danger-hover:hover {
+      color: var(--pv-accent-red);
+      border-color: rgba(220, 38, 38, 0.4);
+    }
+    .modal-backdrop {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .modal-dialog {
+      width: 480px;
+      max-width: 90vw;
+      padding: 1.75rem;
+      background: var(--pv-bg-elevated);
+      box-shadow: var(--pv-shadow-lg);
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+    .modal-header h2 {
+      margin: 0;
+      font-size: 1.25rem;
+      color: var(--pv-text-primary);
+    }
+    .close-btn {
+      background: none;
+      border: none;
+      color: var(--pv-text-muted);
+      font-size: 1.5rem;
+      cursor: pointer;
+      padding: 0;
+      line-height: 1;
+    }
+    .close-btn:hover {
+      color: var(--pv-text-primary);
+    }
+    .form-group {
+      margin-bottom: 1.25rem;
+    }
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.75rem;
+      margin-top: 1.5rem;
     }
   `]
 })
