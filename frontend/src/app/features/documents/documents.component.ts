@@ -18,28 +18,31 @@ interface DocumentType {
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <div class="documents-container" style="padding: 2rem;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-        <h1 style="font-size: 1.75rem; margin: 0;">Documents</h1>
-        <button class="btn-primary" (click)="showCreateModal.set(true)" style="padding: 0.75rem 1.5rem; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">
-          + New Document
+    <div class="documents-container">
+      <div class="documents-header">
+        <div>
+          <h1 class="page-title">Documents</h1>
+          <p class="page-subtitle">Manage, create, and collaborate on intelligent workspace documents</p>
+        </div>
+        <button class="pv-btn pv-btn-primary" (click)="showCreateModal.set(true)">
+          <span style="font-size: 1.1rem; margin-right: 0.35rem;">+</span> New Document
         </button>
       </div>
 
-      <div class="filters" style="background: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem; border: 1px solid #e0e0e0;">
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+      <div class="pv-card filters-card">
+        <div class="filters-grid">
           <div>
-            <label style="display: block; margin-bottom: 0.5rem; font-weight: 500; font-size: 0.9rem;">Workspace</label>
-            <select [(ngModel)]="selectedWorkspaceId" (change)="loadDocuments()" style="width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px;">
-              <option value="">Select Workspace</option>
+            <label class="pv-label">Workspace</label>
+            <select class="pv-select" [(ngModel)]="selectedWorkspaceId" (change)="loadDocuments()">
+              <option value="">-- Select Workspace --</option>
               @for (ws of workspaces(); track ws.id) {
                 <option [value]="ws.id">{{ ws.name }}</option>
               }
             </select>
           </div>
           <div>
-            <label style="display: block; margin-bottom: 0.5rem; font-weight: 500; font-size: 0.9rem;">Folder</label>
-            <select [(ngModel)]="selectedFolderId" (change)="loadDocuments()" style="width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px;" [disabled]="!selectedWorkspaceId">
+            <label class="pv-label">Folder</label>
+            <select class="pv-select" [(ngModel)]="selectedFolderId" (change)="loadDocuments()" [disabled]="!selectedWorkspaceId">
               <option value="">All Folders</option>
               @for (folder of folders(); track folder.id) {
                 <option [value]="folder.id">{{ folder.name }}</option>
@@ -47,54 +50,67 @@ interface DocumentType {
             </select>
           </div>
           <div>
-            <label style="display: block; margin-bottom: 0.5rem; font-weight: 500; font-size: 0.9rem;">Search</label>
-            <input type="text" [(ngModel)]="searchQuery" placeholder="Search documents..." style="width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px;" />
+            <label class="pv-label">Search</label>
+            <input type="text" class="pv-input" [(ngModel)]="searchQuery" placeholder="Filter by title..." />
           </div>
         </div>
       </div>
 
       @if (loading()) {
-        <div style="text-align: center; padding: 3rem; color: #666;">Loading documents...</div>
+        <div class="loading-state">Loading documents...</div>
       } @else if (!selectedWorkspaceId) {
-        <div style="text-align: center; padding: 3rem; color: #999;">
-          <p>Please select a workspace to view documents.</p>
+        <div class="pv-card empty-state-card">
+          <div class="empty-icon">📁</div>
+          <h3>Select a workspace</h3>
+          <p>Please select a workspace above to view and manage documents.</p>
         </div>
       } @else if (paginatedResponse().content.length === 0) {
-        <div style="text-align: center; padding: 3rem; color: #999;">
-          <p>No documents found in this workspace.</p>
+        <div class="pv-card empty-state-card">
+          <div class="empty-icon">📄</div>
+          <h3>No documents found</h3>
+          <p>There are no documents in this workspace folder yet.</p>
+          <button class="pv-btn pv-btn-primary" style="margin-top: 1rem;" (click)="showCreateModal.set(true)">+ Create First Document</button>
         </div>
       } @else {
-        <div style="background: white; border-radius: 8px; border: 1px solid #e0e0e0; overflow: hidden;">
-          <table style="width: 100%; border-collapse: collapse;">
-            <thead style="background: #f8f9fa; border-bottom: 2px solid #e0e0e0;">
+        <div class="pv-card table-card">
+          <table class="pv-table">
+            <thead>
               <tr>
-                <th style="padding: 1rem; text-align: left; font-weight: 600; color: #333;">Title</th>
-                <th style="padding: 1rem; text-align: left; font-weight: 600; color: #333;">Type</th>
-                <th style="padding: 1rem; text-align: left; font-weight: 600; color: #333;">Status</th>
-                <th style="padding: 1rem; text-align: left; font-weight: 600; color: #333;">Version</th>
-                <th style="padding: 1rem; text-align: left; font-weight: 600; color: #333;">Last Updated</th>
-                <th style="padding: 1rem; text-align: left; font-weight: 600; color: #333;">Actions</th>
+                <th>Title</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Version</th>
+                <th>Last Updated</th>
+                <th style="text-align: right;">Actions</th>
               </tr>
             </thead>
             <tbody>
-              @for (doc of filteredDocuments(); track doc.id; let even = $even) {
-                <tr [style.background]="even ? '#f8f9fa' : 'white'" style="border-bottom: 1px solid #f0f0f0; cursor: pointer;" (click)="viewDocument(doc.id)">
-                  <td style="padding: 1rem;">
-                    <div style="font-weight: 500; color: #333;">{{ doc.title }}</div>
-                    <div style="font-size: 0.85rem; color: #999; margin-top: 0.25rem;">{{ doc.contentType }}</div>
+              @for (doc of filteredDocuments(); track doc.id) {
+                <tr class="clickable-row" (click)="viewDocument(doc.id)">
+                  <td>
+                    <div class="doc-title-cell">
+                      <span class="doc-type-icon">📄</span>
+                      <div>
+                        <div class="doc-title">{{ doc.title }}</div>
+                        <div class="doc-sub">{{ doc.contentType }}</div>
+                      </div>
+                    </div>
                   </td>
-                  <td style="padding: 1rem; color: #666;">{{ doc.documentType || 'TEXT' }}</td>
-                  <td style="padding: 1rem;">
-                    <span [style.padding]="'0.25rem 0.75rem'" [style.border-radius]="'12px'" [style.fontSize]="'0.8rem'" [style.font-weight]="'600'"
-                      [style.background]="doc.status === 'ACTIVE' ? '#d4edda' : doc.status === 'DRAFT' ? '#fff3cd' : '#f8d7da'"
-                      [style.color]="doc.status === 'ACTIVE' ? '#155724' : doc.status === 'DRAFT' ? '#856404' : '#721c24'">
+                  <td>
+                    <span class="pv-badge pv-badge-blue">{{ doc.documentType || 'TEXT' }}</span>
+                  </td>
+                  <td>
+                    <span class="pv-badge"
+                      [class.pv-badge-green]="doc.status === 'ACTIVE'"
+                      [class.pv-badge-amber]="doc.status === 'DRAFT'"
+                      [class.pv-badge-red]="doc.status === 'ARCHIVED'">
                       {{ doc.status }}
                     </span>
                   </td>
-                  <td style="padding: 1rem; color: #666;">v{{ doc.currentVersion }}</td>
-                  <td style="padding: 1rem; color: #666; font-size: 0.9rem;">{{ doc.updatedAt | date:'short' }}</td>
-                  <td style="padding: 1rem;">
-                    <button *ngIf="!auth.isRestricted()" (click)="deleteDocument(doc.id, $event)" style="padding: 0.4rem 0.8rem; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">Delete</button>
+                  <td class="version-cell">v{{ doc.currentVersion }}</td>
+                  <td class="date-cell">{{ doc.updatedAt | date:'mediumDate' }}</td>
+                  <td style="text-align: right;" (click)="$event.stopPropagation()">
+                    <button *ngIf="!auth.isRestricted()" class="pv-btn pv-btn-ghost xs-btn danger-hover" (click)="deleteDocument(doc.id, $event)">Delete</button>
                   </td>
                 </tr>
               }
@@ -102,14 +118,14 @@ interface DocumentType {
           </table>
 
           @if (paginatedResponse().totalPages > 1) {
-            <div style="padding: 1rem; border-top: 1px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center;">
-              <span style="color: #666; font-size: 0.9rem;">
+            <div class="pagination-bar">
+              <span class="page-info">
                 Page {{ paginatedResponse().number + 1 }} of {{ paginatedResponse().totalPages }}
                 ({{ paginatedResponse().totalElements }} total)
               </span>
-              <div style="display: flex; gap: 0.5rem;">
-                <button (click)="goToPage(paginatedResponse().number - 1)" [disabled]="paginatedResponse().first" style="padding: 0.5rem 1rem; background: #f0f0f0; border: none; border-radius: 4px; cursor: pointer;">Previous</button>
-                <button (click)="goToPage(paginatedResponse().number + 1)" [disabled]="paginatedResponse().last" style="padding: 0.5rem 1rem; background: #f0f0f0; border: none; border-radius: 4px; cursor: pointer;">Next</button>
+              <div class="page-buttons">
+                <button class="pv-btn pv-btn-outline xs-btn" (click)="goToPage(paginatedResponse().number - 1)" [disabled]="paginatedResponse().first">Previous</button>
+                <button class="pv-btn pv-btn-outline xs-btn" (click)="goToPage(paginatedResponse().number + 1)" [disabled]="paginatedResponse().last">Next</button>
               </div>
             </div>
           }
@@ -117,25 +133,28 @@ interface DocumentType {
       }
 
       @if (showCreateModal()) {
-        <div class="modal-overlay" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;" (click)="showCreateModal.set(false)">
-          <div class="modal-content" style="background: white; border-radius: 8px; padding: 2rem; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto;" (click)="$event.stopPropagation()">
-            <h2 style="margin: 0 0 1.5rem 0;">Create New Document</h2>
+        <div class="modal-backdrop" (click)="showCreateModal.set(false)">
+          <div class="modal-dialog pv-card" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+              <h2>Create New Document</h2>
+              <button class="close-btn" (click)="showCreateModal.set(false)">&times;</button>
+            </div>
             <form (ngSubmit)="submitCreateDocument()">
-              <div style="margin-bottom: 1rem;">
-                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Document Title</label>
-                <input type="text" [(ngModel)]="newDocTitle" name="title" required style="width: 100%; padding: 0.75rem; border: 1px solid #ccc; border-radius: 4px;" />
+              <div class="form-group">
+                <label class="pv-label">Document Title</label>
+                <input type="text" class="pv-input" [(ngModel)]="newDocTitle" name="title" required placeholder="e.g. Q4 Strategy, Security Architecture" />
               </div>
-              <div style="margin-bottom: 1rem;">
-                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Document Type</label>
-                <select [(ngModel)]="newDocType" name="docType" style="width: 100%; padding: 0.75rem; border: 1px solid #ccc; border-radius: 4px;">
+              <div class="form-group">
+                <label class="pv-label">Document Type</label>
+                <select class="pv-select" [(ngModel)]="newDocType" name="docType">
                   @for (type of documentTypes; track type.value) {
                     <option [value]="type.value">{{ type.label }}</option>
                   }
                 </select>
               </div>
-              <div style="margin-bottom: 1rem;">
-                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Sensitivity Level</label>
-                <select [(ngModel)]="newDocSensitivity" name="sensitivity" style="width: 100%; padding: 0.75rem; border: 1px solid #ccc; border-radius: 4px;">
+              <div class="form-group">
+                <label class="pv-label">Sensitivity Level</label>
+                <select class="pv-select" [(ngModel)]="newDocSensitivity" name="sensitivity">
                   <option value="PUBLIC">Public</option>
                   <option value="INTERNAL">Internal</option>
                   <option value="CONFIDENTIAL">Confidential</option>
@@ -143,20 +162,183 @@ interface DocumentType {
                   <option value="TOP_SECRET">Top Secret</option>
                 </select>
               </div>
-              <div style="margin-bottom: 1.5rem;">
-                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Initial Content</label>
-                <textarea [(ngModel)]="newDocContent" name="content" rows="6" style="width: 100%; padding: 0.75rem; border: 1px solid #ccc; border-radius: 4px; font-family: monospace;"></textarea>
+              <div class="form-group">
+                <label class="pv-label">Initial Content (Optional)</label>
+                <textarea class="pv-textarea" [(ngModel)]="newDocContent" name="content" rows="4" placeholder="Brief notes or outline..."></textarea>
               </div>
-              <div style="display: flex; gap: 1rem; justify-content: flex-end;">
-                <button type="button" (click)="showCreateModal.set(false)" style="padding: 0.75rem 1.5rem; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">Cancel</button>
-                <button type="submit" style="padding: 0.75rem 1.5rem; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Create Document</button>
+              <div class="modal-footer">
+                <button type="button" class="pv-btn pv-btn-outline" (click)="showCreateModal.set(false)">Cancel</button>
+                <button type="submit" class="pv-btn pv-btn-primary" [disabled]="!newDocTitle.trim()">Create Document</button>
               </div>
             </form>
           </div>
         </div>
       }
     </div>
-  `
+  `,
+  styles: [`
+    .documents-container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    .documents-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+    .page-title {
+      font-size: 1.85rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin: 0 0 0.25rem 0;
+      color: var(--pv-text-primary);
+    }
+    .page-subtitle {
+      color: var(--pv-text-muted);
+      font-size: 0.9rem;
+      margin: 0;
+    }
+    .filters-card {
+      padding: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+    .filters-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+    }
+    .loading-state {
+      text-align: center;
+      padding: 3rem;
+      color: var(--pv-text-muted);
+    }
+    .empty-state-card {
+      text-align: center;
+      padding: 3.5rem 2rem;
+    }
+    .empty-icon {
+      font-size: 2.5rem;
+      margin-bottom: 1rem;
+    }
+    .empty-state-card h3 {
+      font-size: 1.25rem;
+      margin-bottom: 0.5rem;
+      color: var(--pv-text-primary);
+    }
+    .empty-state-card p {
+      color: var(--pv-text-muted);
+      font-size: 0.9rem;
+    }
+    .table-card {
+      overflow: hidden;
+    }
+    .clickable-row {
+      cursor: pointer;
+      transition: background var(--pv-transition-fast);
+    }
+    .clickable-row:hover {
+      background: var(--pv-bg-card-hover);
+    }
+    .doc-title-cell {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .doc-type-icon {
+      font-size: 1.25rem;
+    }
+    .doc-title {
+      font-weight: 600;
+      color: var(--pv-text-primary);
+    }
+    .doc-sub {
+      font-size: 0.75rem;
+      color: var(--pv-text-subtle);
+      margin-top: 0.15rem;
+    }
+    .version-cell {
+      color: var(--pv-text-muted);
+      font-size: 0.85rem;
+      font-family: monospace;
+    }
+    .date-cell {
+      color: var(--pv-text-muted);
+      font-size: 0.85rem;
+    }
+    .xs-btn {
+      padding: 0.3rem 0.65rem;
+      font-size: 0.75rem;
+    }
+    .danger-hover:hover {
+      color: var(--pv-accent-red);
+      background: rgba(220, 38, 38, 0.1);
+    }
+    .pagination-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 1.25rem;
+      border-top: 1px solid var(--pv-border);
+    }
+    .page-info {
+      font-size: 0.82rem;
+      color: var(--pv-text-muted);
+    }
+    .page-buttons {
+      display: flex;
+      gap: 0.5rem;
+    }
+    .modal-backdrop {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .modal-dialog {
+      width: 540px;
+      max-width: 90vw;
+      padding: 1.75rem;
+      background: var(--pv-bg-elevated);
+      box-shadow: var(--pv-shadow-lg);
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+    .modal-header h2 {
+      margin: 0;
+      font-size: 1.25rem;
+      color: var(--pv-text-primary);
+    }
+    .close-btn {
+      background: none;
+      border: none;
+      color: var(--pv-text-muted);
+      font-size: 1.5rem;
+      cursor: pointer;
+      padding: 0;
+      line-height: 1;
+    }
+    .close-btn:hover {
+      color: var(--pv-text-primary);
+    }
+    .form-group {
+      margin-bottom: 1.2rem;
+    }
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.75rem;
+      margin-top: 1.5rem;
+    }
+  `]
 })
 export class DocumentsComponent implements OnInit, OnDestroy {
   private apiService = inject(ApiService);
@@ -219,6 +401,10 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     this.apiService.listWorkspaces().subscribe({
       next: (data) => {
         this.workspaces.set(data);
+        if (!this.selectedWorkspaceId && data.length > 0) {
+          this.selectedWorkspaceId = data[0].id;
+          this.loadDocuments();
+        }
       },
       error: (err) => {
         console.error('Failed to load workspaces:', err);

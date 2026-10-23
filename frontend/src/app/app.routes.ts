@@ -55,7 +55,7 @@ export const routes: Routes = [
   {
     path: 'desk',
     loadComponent: () => import('./features/desk/vault-desk.component').then(m => m.VaultDeskComponent),
-    canActivate: [leadershipGuard]
+    canActivate: [authGuard]
   },
   {
     path: 'files',

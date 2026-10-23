@@ -11,6 +11,8 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import java.time.Instant;
 import java.util.UUID;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -18,6 +20,7 @@ import java.util.UUID;
 @Entity
 @Table(name = "pv_file_asset")
 @EntityListeners(AuditingEntityListener.class)
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class FileAsset {
 
     @Id
@@ -27,6 +30,14 @@ public class FileAsset {
     @ManyToOne(fetch = FetchType.LAZY, optional = true)
     @JoinColumn(name = "document_id")
     private Document document;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "workspace_id")
+    private Workspace workspace;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "folder_id")
+    private Folder folder;
 
     @Column(nullable = false)
     private String fileName;

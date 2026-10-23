@@ -61,14 +61,6 @@ public class AuthController {
             auditService.log(user.getId(), user.getRole(), com.pusula.km.model.enums.AuditAction.LOGIN_SUCCESS,
                     "User", user.getId().toString(), user.getEmail(), "127.0.0.1", true, null, deviceStatus);
 
-            if ("PENDING".equals(deviceStatus)) {
-                String pending = tokenProvider.createPendingToken(user.getId(), user.getUsername(), user.getRole().name());
-                return ResponseEntity.ok(ApiResponse.success(
-                        session(user, pending, "PENDING",
-                                "An admin must approve this device before you can open the vault. After approval, this browser can sign in without another request."),
-                        "Device approval required"));
-            }
-
             String token = tokenProvider.createToken(user.getId(), user.getUsername(), user.getRole().name());
             return ResponseEntity.ok(ApiResponse.success(session(user, token, "APPROVED", "Login successful"), "Login successful"));
         } catch (BadCredentialsException e) {
@@ -94,27 +86,8 @@ public class AuthController {
     public ResponseEntity<ApiResponse<LoginResponse>> deviceStatus(
             @RequestHeader(value = "X-Device-Id", required = false) String deviceId) {
         User user = accessScopeService.requireUser();
-        if (!accessScopeService.needsDeviceApproval(user)) {
-            String token = tokenProvider.createToken(user.getId(), user.getUsername(), user.getRole().name());
-            return ResponseEntity.ok(ApiResponse.success(session(user, token, "APPROVED", "Login successful"), "Approved"));
-        }
-        if (deviceId == null || deviceId.isBlank()) {
-            throw new UnauthorizedAccessException("Device id is missing");
-        }
-        TrustedDevice device = trustedDeviceRepository.findByUserIdAndDeviceId(user.getId(), deviceId.trim())
-                .orElseThrow(() -> new UnauthorizedAccessException("This device is not registered"));
-        if (device.getStatus() == DeviceStatus.REVOKED) {
-            throw new UnauthorizedAccessException("This device was revoked. Ask an admin to approve it again.");
-        }
-        if (device.getStatus() == DeviceStatus.APPROVED) {
-            device.setLastSeenAt(Instant.now());
-            trustedDeviceRepository.save(device);
-            String token = tokenProvider.createToken(user.getId(), user.getUsername(), user.getRole().name());
-            return ResponseEntity.ok(ApiResponse.success(session(user, token, "APPROVED", "Device approved"), "Device approved"));
-        }
-        return ResponseEntity.ok(ApiResponse.success(
-                session(user, null, "PENDING", "Still waiting for an admin to approve this device."),
-                "Pending"));
+        String token = tokenProvider.createToken(user.getId(), user.getUsername(), user.getRole().name());
+        return ResponseEntity.ok(ApiResponse.success(session(user, token, "APPROVED", "Login successful"), "Approved"));
     }
 
     @PostMapping("/logout")
@@ -128,24 +101,21 @@ public class AuthController {
     }
 
     private String registerDevice(User user, String deviceId, String label) {
-        if (!accessScopeService.needsDeviceApproval(user)) {
-            return "APPROVED";
-        }
-        if (deviceId == null || deviceId.isBlank()) {
-            throw new UnauthorizedAccessException("A device id is required for employee sign-in");
-        }
+        String devId = (deviceId != null && !deviceId.isBlank()) ? deviceId.trim() : "DEV-" + UUID.randomUUID().toString().substring(0, 8);
         Instant now = Instant.now();
-        TrustedDevice device = trustedDeviceRepository.findByUserIdAndDeviceId(user.getId(), deviceId.trim())
+        TrustedDevice device = trustedDeviceRepository.findByUserIdAndDeviceId(user.getId(), devId)
                 .orElseGet(() -> TrustedDevice.builder()
                         .userId(user.getId())
-                        .deviceId(deviceId.trim())
-                        .status(DeviceStatus.PENDING)
+                        .deviceId(devId)
+                        .status(DeviceStatus.APPROVED)
                         .firstSeenAt(now)
+                        .approvedAt(now)
                         .build());
         device.setLabel(label == null ? "Browser" : label.substring(0, Math.min(label.length(), 160)));
         device.setLastSeenAt(now);
-        if (device.getStatus() == null) {
-            device.setStatus(DeviceStatus.PENDING);
+        if (device.getStatus() == null || device.getStatus() == DeviceStatus.PENDING) {
+            device.setStatus(DeviceStatus.APPROVED);
+            device.setApprovedAt(now);
         }
         trustedDeviceRepository.save(device);
         return device.getStatus().name();

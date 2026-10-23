@@ -160,29 +160,39 @@ type SaveState = 'SAVING' | 'SAVED' | 'ERROR' | 'CONFLICT';
             <div class="ai-panel" *ngIf="activeSidebarTab() === 'ai'">
               <div class="panel-section">
                 <h4 class="panel-title">Quick actions</h4>
-                <button class="ai-action">
+                <button class="ai-action" (click)="askDocAi('Summarise this document concisely with key findings.')">
                   <span class="ai-ic">📝</span>
                   <span>Summarize document</span>
                 </button>
-                <button class="ai-action">
+                <button class="ai-action" (click)="askDocAi('Extract all actionable items, to-dos and owners from this document.')">
                   <span class="ai-ic">✅</span>
                   <span>Extract action items</span>
                 </button>
-                <button class="ai-action">
+                <button class="ai-action" (click)="askDocAi('Find cross-references and citations related to this document.')">
                   <span class="ai-ic">🔗</span>
                   <span>Find citations</span>
                 </button>
-                <button class="ai-action">
+                <button class="ai-action" (click)="askDocAi('Suggest how to improve the research notes')">
                   <span class="ai-ic">🔍</span>
                   <span>Proofread &amp; suggest</span>
                 </button>
               </div>
               <div class="panel-section">
                 <h4 class="panel-title">Ask about this document</h4>
-                <textarea class="pv-textarea" placeholder="Type your question..."></textarea>
-                <button class="pv-btn pv-btn-primary full-btn mt-sm">
-                  Ask Pusula AI
+                <textarea class="pv-textarea" [(ngModel)]="docAiQuestion" placeholder="Type your question..." (keydown.enter)="askDocAi(docAiQuestion)"></textarea>
+                <button class="pv-btn pv-btn-primary full-btn mt-sm" (click)="askDocAi(docAiQuestion)" [disabled]="docAiLoading() || !docAiQuestion.trim()">
+                  {{ docAiLoading() ? 'Thinking...' : 'Ask Pusula AI' }}
                 </button>
+                @if (docAiAnswer()) {
+                  <div class="pv-card" style="margin-top: 1rem; border: 1px solid var(--pv-accent-blue);">
+                    <div class="pv-card-body" style="padding: 0.85rem; font-size: 0.85rem;">
+                      <div style="font-weight: 700; color: var(--pv-accent-blue); margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.4rem;">
+                        <span>✨ AI Insight</span>
+                      </div>
+                      <p style="margin: 0; line-height: 1.5; white-space: pre-wrap;">{{ docAiAnswer() }}</p>
+                    </div>
+                  </div>
+                }
               </div>
             </div>
 
@@ -825,6 +835,9 @@ export class DocumentWorkspaceComponent implements OnInit, OnDestroy {
 
   activeSidebarTab = signal<'ai' | 'comments'>('ai');
   newCommentText = '';
+  docAiQuestion = '';
+  docAiLoading = signal(false);
+  docAiAnswer = signal<string | null>(null);
 
   unresolvedComments = computed(() => this.comments().filter(c => !c.resolved).length);
 
@@ -919,6 +932,21 @@ export class DocumentWorkspaceComponent implements OnInit, OnDestroy {
   private pingPresence(): void {
     if (!this.docId) return;
     this.api.post('/vault/presence', { documentId: this.docId }).subscribe({ error: () => {} });
+  }
+
+  askDocAi(q: string): void {
+    if (!q?.trim()) return;
+    this.docAiLoading.set(true);
+    this.api.post<{ answer: string }>('/vault/ask', { question: q }).subscribe({
+      next: (res: any) => {
+        this.docAiLoading.set(false);
+        this.docAiAnswer.set(res?.data?.answer || res?.answer || 'No response generated.');
+      },
+      error: (err: any) => {
+        this.docAiLoading.set(false);
+        this.docAiAnswer.set('Error querying AI assistant: ' + (err?.error?.message || err?.message));
+      }
+    });
   }
 
   prioritise(versionId: string, current: boolean): void {

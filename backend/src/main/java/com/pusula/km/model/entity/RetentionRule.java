@@ -1,5 +1,7 @@
 package com.pusula.km.model.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -18,6 +20,7 @@ import java.util.UUID;
 @Entity
 @Table(name = "pv_retention_rule")
 @EntityListeners(AuditingEntityListener.class)
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class RetentionRule {
 
     @Id
@@ -40,6 +43,30 @@ public class RetentionRule {
 
     @Column(nullable = false)
     private String applicableDocumentTypes;
+
+    @JsonProperty("retentionDays")
+    public Integer getRetentionDaysCamel() { return retentionDays; }
+
+    @JsonProperty("retention_days")
+    public Integer getRetentionDaysSnake() { return retentionDays; }
+
+    @JsonProperty("autoArchive")
+    public boolean isAutoArchiveCamel() { return autoArchive; }
+
+    @JsonProperty("auto_archive")
+    public boolean isAutoArchiveSnake() { return autoArchive; }
+
+    @JsonProperty("autoDelete")
+    public boolean isAutoDeleteCamel() { return autoDelete; }
+
+    @JsonProperty("auto_delete")
+    public boolean isAutoDeleteSnake() { return autoDelete; }
+
+    @JsonProperty("applicableDocumentTypes")
+    public String getApplicableDocumentTypesCamel() { return applicableDocumentTypes; }
+
+    @JsonProperty("applicable_document_types")
+    public String getApplicableDocumentTypesSnake() { return applicableDocumentTypes; }
 
     @CreatedDate
     private Instant createdAt;

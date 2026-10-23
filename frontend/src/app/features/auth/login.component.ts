@@ -13,7 +13,7 @@ import { AuthService, deviceId } from '../../core/auth/auth.service';
       <div class="login-card">
         <div class="login-header">
           <h2>{{ waiting() ? 'Waiting for approval' : 'Welcome back' }}</h2>
-          <p>{{ waiting() ? 'Your admin needs to allow this device once.' : 'Sign in with the account your admin created.' }}</p>
+          <p>{{ waiting() ? 'Your admin needs to allow this device once.' : 'Sign in to access your Pusula Vault workspace.' }}</p>
         </div>
 
         @if (!waiting()) {
@@ -33,11 +33,23 @@ import { AuthService, deviceId } from '../../core/auth/auth.service';
               {{ busy ? 'Signing in…' : 'Sign in' }}
             </button>
           </form>
+
+          <div class="demo-section">
+            <span class="demo-label">Quick Sign-In Credentials</span>
+            <div class="demo-buttons">
+              <button type="button" class="demo-btn" (click)="fillAdmin()">
+                <span class="badge-tag admin-tag">ADMIN</span> admin&#64;gmail.com
+              </button>
+              <button type="button" class="demo-btn" (click)="fillEmployee()">
+                <span class="badge-tag emp-tag">EMPLOYEE</span> employee&#64;gmail.com
+              </button>
+            </div>
+          </div>
         } @else {
           <div class="wait-box">
             <p>{{ message }}</p>
             <p class="device-id">Device {{ shortDevice }}</p>
-            <p class="wait-note">Leave this page open. You will go straight in when an admin approves this browser. Next time, sign-in will not ask again.</p>
+            <p class="wait-note">Leave this page open. You will go straight in when an admin approves this browser.</p>
           </div>
         }
 
@@ -68,7 +80,63 @@ import { AuthService, deviceId } from '../../core/auth/auth.service';
     .login-error { color: #f87171; font-size: 0.9rem; margin-bottom: 0.8rem; }
     .wait-box { background: rgba(14,165,233,0.08); border: 1px solid rgba(14,165,233,0.3); border-radius: 12px; padding: 1rem; }
     .device-id { font-family: ui-monospace, monospace; font-size: 0.85rem; color: var(--pv-text-secondary); }
-    .wait-note { color: var(--pv-text-muted); font-size: 0.9rem; }
+    .wait-note { color: var(--pv-text-muted); font-size: 0.9rem; margin-top: 0.5rem; }
+    .demo-section {
+      margin-top: 1.25rem;
+      padding-top: 1.1rem;
+      border-top: 1px solid var(--pv-border-soft);
+    }
+    .demo-label {
+      display: block;
+      font-size: 0.72rem;
+      color: var(--pv-text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 600;
+      margin-bottom: 0.6rem;
+      text-align: center;
+    }
+    .demo-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+    }
+    .demo-btn {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      width: 100%;
+      background: var(--pv-bg-dark);
+      border: 1px solid var(--pv-border);
+      border-radius: var(--pv-radius-md);
+      padding: 0.45rem 0.75rem;
+      color: var(--pv-text-primary);
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all var(--pv-transition-fast);
+      text-align: left;
+    }
+    .demo-btn:hover {
+      border-color: var(--pv-accent-primary);
+      background: rgba(30, 64, 175, 0.15);
+    }
+    .badge-tag {
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      letter-spacing: 0.04em;
+    }
+    .admin-tag {
+      background: rgba(212, 175, 55, 0.2);
+      color: var(--pv-accent-primary);
+      border: 1px solid rgba(212, 175, 55, 0.4);
+    }
+    .emp-tag {
+      background: rgba(14, 165, 233, 0.2);
+      color: #38bdf8;
+      border: 1px solid rgba(14, 165, 233, 0.4);
+    }
     .login-footer { margin-top: 1.5rem; text-align: center; padding-top: 1.2rem; border-top: 1px solid var(--pv-border-soft); }
   `]
 })
@@ -89,17 +157,35 @@ export class LoginComponent implements OnDestroy {
 
   navigateToHome() { this.router.navigate(['/']); }
 
+  fillAdmin() {
+    this.email = 'admin@gmail.com';
+    this.password = 'admin123';
+    this.error = '';
+  }
+
+  fillEmployee() {
+    this.email = 'employee@gmail.com';
+    this.password = 'employee123';
+    this.error = '';
+  }
+
   onLogin() {
     this.error = '';
+    const cleanEmail = (this.email || '').trim().toLowerCase();
+    const cleanPassword = (this.password || '').trim();
+    if (!cleanEmail || !cleanPassword) {
+      this.error = 'Please enter both your email address and password.';
+      return;
+    }
     this.busy = true;
-    this.authService.login({ email: this.email, password: this.password }).subscribe({
+    this.authService.login({ email: cleanEmail, password: cleanPassword }).subscribe({
       next: (res) => {
         this.busy = false;
         const data = res.data;
-        if (!data) return;
-        if (data.deviceStatus === 'PENDING') {
+        const status = data.deviceStatus || (data as any).device_status;
+        if (status === 'PENDING') {
           this.isWaiting = true;
-          this.message = data.deviceMessage || 'Waiting for admin approval.';
+          this.message = data.deviceMessage || (data as any).device_message || 'Waiting for admin approval.';
           this.pendingToken = data.token || '';
           this.startPoll();
           return;
@@ -119,7 +205,8 @@ export class LoginComponent implements OnDestroy {
       if (!this.pendingToken) return;
       this.authService.pollDevice(this.pendingToken).subscribe({
         next: (res) => {
-          if (res.data?.deviceStatus === 'APPROVED' && res.data.token) {
+          const status = res.data?.deviceStatus || (res.data as any)?.device_status;
+          if (status === 'APPROVED' && res.data?.token) {
             this.stopPoll();
             this.authService.persist(res.data);
             this.router.navigate(['/dashboard']);

@@ -24,6 +24,7 @@ public class DataSeeder implements CommandLineRunner {
 
     private final UserRepository userRepository;
     private final WorkspaceRepository workspaceRepository;
+    private final WorkspaceGrantRepository workspaceGrantRepository;
     private final DocumentRepository documentRepository;
     private final FolderRepository folderRepository;
     private final AuditLogRepository auditLogRepository;
@@ -31,10 +32,10 @@ public class DataSeeder implements CommandLineRunner {
     private final RetentionRuleRepository retentionRuleRepository;
     private final PasswordEncoder passwordEncoder;
 
-    @Value("${pv.initial-admin.email:}")
+    @Value("${pv.initial-admin.email:admin@gmail.com}")
     private String initialAdminEmail;
 
-    @Value("${pv.initial-admin.password:}")
+    @Value("${pv.initial-admin.password:admin123}")
     private String initialAdminPassword;
 
     @Value("${pv.initial-admin.name:System Administrator}")
@@ -66,24 +67,47 @@ public class DataSeeder implements CommandLineRunner {
 
     private void seedUsers() {
         String email = initialAdminEmail.trim().toLowerCase();
-        User admin = User.builder()
-                .username(email)
-                .email(email)
-                .displayName(initialAdminName.trim())
-                .passwordHash(passwordEncoder.encode(initialAdminPassword))
-                .role(com.pusula.km.model.enums.Role.ADMIN)
-                .active(true)
-                .featurePermissions(Set.of(
-                    "VIEW_WORKSPACES", "CREATE_WORKSPACES", "DELETE_WORKSPACES",
-                    "VIEW_DOCUMENTS", "CREATE_DOCUMENTS", "EDIT_DOCUMENTS", "DELETE_DOCUMENTS",
-                    "VIEW_AUDIT_LOGS", "VIEW_ANALYTICS", "GOVERNANCE_CONTROLS", "DRIVE_SYNC",
-                    "MANAGE_USERS", "MANAGE_ROLES", "MANAGE_TEAMS"
-                ))
-                .createdAt(Instant.now())
-                .updatedAt(Instant.now())
-                .build();
-        userRepository.save(admin);
-        log.info("Seeded initial administrator account.");
+        User admin = userRepository.findByEmailIgnoreCase(email).orElse(null);
+        if (admin == null) {
+            admin = User.builder()
+                    .username(email)
+                    .email(email)
+                    .displayName(initialAdminName.trim())
+                    .passwordHash(passwordEncoder.encode(initialAdminPassword))
+                    .role(com.pusula.km.model.enums.Role.ADMIN)
+                    .active(true)
+                    .featurePermissions(Set.of(
+                        "VIEW_WORKSPACES", "CREATE_WORKSPACES", "DELETE_WORKSPACES",
+                        "VIEW_DOCUMENTS", "CREATE_DOCUMENTS", "EDIT_DOCUMENTS", "DELETE_DOCUMENTS",
+                        "VIEW_AUDIT_LOGS", "VIEW_ANALYTICS", "GOVERNANCE_CONTROLS", "DRIVE_SYNC",
+                        "MANAGE_USERS", "MANAGE_ROLES", "MANAGE_TEAMS"
+                    ))
+                    .createdAt(Instant.now())
+                    .updatedAt(Instant.now())
+                    .build();
+            userRepository.save(admin);
+            log.info("Seeded initial administrator account.");
+        }
+
+        String empEmail = "employee@gmail.com";
+        User employee = userRepository.findByEmailIgnoreCase(empEmail).orElse(null);
+        if (employee == null) {
+            employee = User.builder()
+                    .username(empEmail)
+                    .email(empEmail)
+                    .displayName("Demo Employee")
+                    .passwordHash(passwordEncoder.encode("employee123"))
+                    .role(com.pusula.km.model.enums.Role.EMPLOYEE)
+                    .active(true)
+                    .featurePermissions(Set.of(
+                        "VIEW_WORKSPACES", "VIEW_DOCUMENTS", "CREATE_DOCUMENTS", "EDIT_DOCUMENTS"
+                    ))
+                    .createdAt(Instant.now())
+                    .updatedAt(Instant.now())
+                    .build();
+            userRepository.save(employee);
+            log.info("Seeded initial employee account (employee@gmail.com).");
+        }
     }
 
     private void seedWorkspaces() {
@@ -115,7 +139,26 @@ public class DataSeeder implements CommandLineRunner {
 
         workspaceRepository.saveAll(List.of(engineering, marketing, finance));
 
-        log.info("Seeded 3 workspaces");
+        User employee = userRepository.findByEmailIgnoreCase("employee@gmail.com").orElse(null);
+        if (employee != null) {
+            WorkspaceGrant g1 = WorkspaceGrant.builder()
+                    .userId(employee.getId())
+                    .workspaceId(engineering.getId())
+                    .canEdit(true)
+                    .grantedBy(admin.getId())
+                    .createdAt(Instant.now())
+                    .build();
+            WorkspaceGrant g2 = WorkspaceGrant.builder()
+                    .userId(employee.getId())
+                    .workspaceId(marketing.getId())
+                    .canEdit(true)
+                    .grantedBy(admin.getId())
+                    .createdAt(Instant.now())
+                    .build();
+            workspaceGrantRepository.saveAll(List.of(g1, g2));
+        }
+
+        log.info("Seeded 3 workspaces and employee access grants");
     }
 
     private void seedDocuments() {

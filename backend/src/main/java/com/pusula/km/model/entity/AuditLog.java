@@ -53,12 +53,10 @@ public class AuditLog {
     @Builder.Default
     private boolean success = true;
 
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "json")
+    @Column(columnDefinition = "TEXT")
     private String previousState;
 
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "json")
+    @Column(columnDefinition = "TEXT")
     private String newState;
 
     @Column(nullable = false)

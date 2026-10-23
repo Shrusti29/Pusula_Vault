@@ -18,6 +18,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 
 import java.util.List;
 
@@ -29,11 +30,13 @@ public class SecurityAutoConfig {
     private final CorsProperties corsProperties;
     private final JwtTokenFilter jwtTokenFilter;
     private final LoginRateLimitFilter loginRateLimitFilter;
+    private final CustomUserDetailsService customUserDetailsService;
 
-    public SecurityAutoConfig(CorsProperties corsProperties, JwtTokenFilter jwtTokenFilter, LoginRateLimitFilter loginRateLimitFilter) {
+    public SecurityAutoConfig(CorsProperties corsProperties, JwtTokenFilter jwtTokenFilter, LoginRateLimitFilter loginRateLimitFilter, CustomUserDetailsService customUserDetailsService) {
         this.corsProperties = corsProperties;
         this.jwtTokenFilter = jwtTokenFilter;
         this.loginRateLimitFilter = loginRateLimitFilter;
+        this.customUserDetailsService = customUserDetailsService;
     }
 
     @Bean
@@ -42,6 +45,15 @@ public class SecurityAutoConfig {
     }
 
     @Bean
+    public DaoAuthenticationProvider daoAuthenticationProvider() {
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
+        provider.setUserDetailsService(customUserDetailsService);
+        provider.setPasswordEncoder(passwordEncoder());
+        return provider;
+    }
+
+    @Bean
+
     public AuthenticationManager authenticationManager(AuthenticationConfiguration authConfig) throws Exception {
         return authConfig.getAuthenticationManager();
     }
@@ -49,17 +61,13 @@ public class SecurityAutoConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
+                .authenticationProvider(daoAuthenticationProvider())
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/v1/auth/**").permitAll()
-                        .requestMatchers("/actuator/health", "/actuator/info").permitAll()
-                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-resources/**").permitAll()
-                        .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll()
                 )
-                .addFilterBefore(loginRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtTokenFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

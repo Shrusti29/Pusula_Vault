@@ -59,17 +59,24 @@ interface Slide { title: string; bullets: string[]; }
   `,
   styles: [`
     .format-shell { min-height: 420px; }
-    .sheet { width: 100%; border-collapse: collapse; background: #fff; }
-    .sheet td { border: 1px solid #e5e7eb; padding: 0; }
-    .sheet input, .slide-title, .slide-bullet, .code-wrap textarea, .file-wrap textarea, .code-wrap select {
-      width: 100%; border: 0; padding: 0.55rem 0.7rem; font: inherit; background: transparent; color: inherit;
+    .sheet { width: 100%; border-collapse: collapse; background: #fff; color: #0f172a !important; }
+    .sheet td { border: 1px solid #cbd5e1; padding: 0; color: #0f172a !important; }
+    .sheet input {
+      width: 100%; border: 0; padding: 0.55rem 0.7rem; font: inherit; background: #ffffff; color: #0f172a !important;
+    }
+    .sheet input:focus {
+      outline: 2px solid var(--pv-accent-primary); background: #f8fafc;
+    }
+    .slide-title, .slide-bullet {
+      width: 100%; border: 0; padding: 0.55rem 0.7rem; font: inherit; background: transparent; color: #0f172a !important;
     }
     .sheet-wrap, .slides, .code-wrap, .file-wrap { padding: 1rem; }
-    .slide-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 14px; padding: 0.8rem; margin-bottom: 0.8rem; box-shadow: 0 8px 24px rgba(15,23,42,0.04); }
-    .slide-title { font-size: 1.25rem; font-weight: 700; }
+    .slide-card { background: #fff; color: #0f172a !important; border: 1px solid #cbd5e1; border-radius: 14px; padding: 0.8rem; margin-bottom: 0.8rem; box-shadow: 0 8px 24px rgba(15,23,42,0.06); }
+    .slide-card * { color: #0f172a; }
+    .slide-title { font-size: 1.25rem; font-weight: 700; color: #0f172a !important; }
     .code-wrap textarea, .file-wrap textarea { min-height: 360px; font-family: ui-monospace, monospace; background: #0f172a; color: #e2e8f0; border-radius: 12px; }
     .code-wrap select { max-width: 180px; margin-bottom: 0.5rem; background: #0f172a; color: #e2e8f0; border-radius: 8px; }
-    .mini { margin-top: 0.6rem; border: 1px solid #cbd5e1; background: #fff; border-radius: 999px; padding: 0.35rem 0.8rem; cursor: pointer; }
+    .mini { margin-top: 0.6rem; border: 1px solid #cbd5e1; background: #f1f5f9; color: #0f172a !important; font-weight: 600; border-radius: 999px; padding: 0.35rem 0.8rem; cursor: pointer; }
     .file-wrap p { color: #64748b; margin-top: 0; }
   `]
 })

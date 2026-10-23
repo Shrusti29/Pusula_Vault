@@ -8,6 +8,8 @@ import com.pusula.km.model.dto.CreateUserRequest;
 import com.pusula.km.model.dto.UpdateUserRequest;
 import com.pusula.km.model.dto.UserResponse;
 import com.pusula.km.model.enums.Role;
+import com.pusula.km.model.entity.Workspace;
+import com.pusula.km.repository.WorkspaceRepository;
 import com.pusula.km.service.impl.AccessScopeService;
 import com.pusula.km.model.entity.User;
 import com.pusula.km.model.response.ApiResponse;
@@ -37,6 +39,7 @@ import java.util.UUID;
 public class AdminUserController {
 
     private final UserRepository userRepository;
+    private final WorkspaceRepository workspaceRepository;
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
     private final AccessScopeService accessScopeService;
@@ -103,7 +106,13 @@ public class AdminUserController {
         } catch (DataIntegrityViolationException ex) {
             throw new com.pusula.km.exception.ConflictException("An account with this email already exists");
         }
-        accessScopeService.replaceGrants(saved.getId(), req.workspaceIds());
+
+        List<UUID> targetWorkspaces = req.workspaceIds();
+        if (targetWorkspaces == null || targetWorkspaces.isEmpty()) {
+            targetWorkspaces = workspaceRepository.findAll().stream().map(Workspace::getId).toList();
+        }
+        accessScopeService.replaceGrants(saved.getId(), targetWorkspaces);
+
         return ResponseEntity.ok(ApiResponse.success(userMapper.toResponse(saved), "User created successfully"));
     }
 

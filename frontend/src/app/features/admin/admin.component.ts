@@ -187,7 +187,7 @@ interface FeaturePermission {
                       <h4>{{ category }}</h4>
                       @for (perm of getPermissionsByCategory(category); track perm.key) {
                         <label class="permission-checkbox">
-                          <input type="checkbox" [value]="perm.key" formControlName="featurePermissions" />
+                          <input type="checkbox" [checked]="selectedPermissions().includes(perm.key)" (change)="togglePermission(perm.key, $any($event.target).checked)" />
                           <span>{{ perm.label }}</span>
                         </label>
                       }
@@ -405,6 +405,7 @@ export class AdminComponent implements OnInit {
   devices = signal<DeviceRow[]>([]);
   workspaces = signal<{ id: string; name: string }[]>([]);
   selectedWorkspaceIds = signal<string[]>([]);
+  selectedPermissions = signal<string[]>(['VIEW_WORKSPACES', 'VIEW_DOCUMENTS', 'CREATE_DOCUMENTS', 'EDIT_DOCUMENTS']);
   showCreateUserModal = signal(false);
   editingId = signal<string | null>(null);
   userForm: FormGroup;
@@ -453,15 +454,15 @@ export class AdminComponent implements OnInit {
   loadUsers() {
     this.apiService.listUsers(0, 50).subscribe({
       next: (page) => {
-        this.users.set(page.content.map((u) => ({
+        this.users.set(page.content.map((u: any) => ({
           id: u.id,
           username: u.username,
           email: u.email,
-          displayName: u.fullName || u.email,
+          displayName: u.fullName || u.full_name || u.displayName || u.display_name || u.email,
           role: u.role,
           active: u.active,
-          featurePermissions: u.featurePermissions || [],
-          workspaceIds: u.workspaceIds || []
+          featurePermissions: u.featurePermissions || u.feature_permissions || [],
+          workspaceIds: u.workspaceIds || u.workspace_ids || []
         })));
       },
       error: (error) => console.error('Failed to load users:', error)
@@ -492,6 +493,7 @@ export class AdminComponent implements OnInit {
     this.formError.set('');
     this.formSuccess.set('');
     this.selectedWorkspaceIds.set([]);
+    this.selectedPermissions.set(['VIEW_WORKSPACES', 'VIEW_DOCUMENTS', 'CREATE_DOCUMENTS', 'EDIT_DOCUMENTS']);
     this.userForm.reset({ role: 'EMPLOYEE', featurePermissions: [] });
     this.userForm.get('password')?.setValidators([Validators.required, Validators.minLength(8)]);
     this.userForm.get('password')?.updateValueAndValidity();
@@ -500,6 +502,10 @@ export class AdminComponent implements OnInit {
 
   toggleWorkspace(id: string, checked: boolean) {
     this.selectedWorkspaceIds.update((current) => checked ? [...current, id] : current.filter((x) => x !== id));
+  }
+
+  togglePermission(key: string, checked: boolean) {
+    this.selectedPermissions.update((current) => checked ? [...current, key] : current.filter((x) => x !== key));
   }
 
   createUser() {
@@ -511,9 +517,9 @@ export class AdminComponent implements OnInit {
         fullName: formValue.fullName,
         password: formValue.password,
         role: formValue.role,
-        featurePermissions: formValue.role === 'EMPLOYEE' || formValue.role === 'INTERN'
-          ? ['VIEW_WORKSPACES', 'VIEW_DOCUMENTS', 'CREATE_DOCUMENTS', 'EDIT_DOCUMENTS']
-          : formValue.featurePermissions,
+        featurePermissions: this.selectedPermissions().length
+          ? this.selectedPermissions()
+          : ['VIEW_WORKSPACES', 'VIEW_DOCUMENTS', 'CREATE_DOCUMENTS', 'EDIT_DOCUMENTS'],
         workspaceIds: this.selectedWorkspaceIds()
       };
       const request = this.editingId()
@@ -525,6 +531,7 @@ export class AdminComponent implements OnInit {
           this.showCreateUserModal.set(false);
           this.editingId.set(null);
           this.selectedWorkspaceIds.set([]);
+          this.selectedPermissions.set(['VIEW_WORKSPACES', 'VIEW_DOCUMENTS', 'CREATE_DOCUMENTS', 'EDIT_DOCUMENTS']);
           this.userForm.reset({ role: 'EMPLOYEE', featurePermissions: [] });
           this.loadUsers();
         },
@@ -540,6 +547,7 @@ export class AdminComponent implements OnInit {
     this.formSuccess.set('');
     this.editingId.set(user.id);
     this.selectedWorkspaceIds.set([...(user.workspaceIds || [])]);
+    this.selectedPermissions.set([...(user.featurePermissions || [])]);
     this.userForm.get('password')?.clearValidators();
     this.userForm.get('password')?.updateValueAndValidity();
     this.userForm.patchValue({

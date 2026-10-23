@@ -33,6 +33,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import com.pusula.km.model.entity.Workspace;
+import com.pusula.km.model.entity.Folder;
+import com.pusula.km.repository.WorkspaceRepository;
+import com.pusula.km.repository.FolderRepository;
+
 @RestController
 @RequestMapping("/api/v1/files")
 @RequiredArgsConstructor
@@ -42,8 +47,12 @@ public class FileAssetController {
     private final FileAssetRepository fileAssetRepository;
     private final UserRepository userRepository;
     private final DocumentRepository documentRepository;
+    private final com.pusula.km.repository.DocumentVersionRepository documentVersionRepository;
+    private final WorkspaceRepository workspaceRepository;
+    private final FolderRepository folderRepository;
     private final FileAssetMapper fileAssetMapper;
     private final AccessScopeService accessScopeService;
+    private final com.pusula.km.service.impl.AuditService auditService;
 
     private UUID currentUserId() {
         Object p = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
@@ -54,7 +63,7 @@ public class FileAssetController {
     @PostMapping("/upload")
     public ResponseEntity<ApiResponse<FileAssetResponse>> uploadFile(
             @RequestParam("file") MultipartFile file,
-            @RequestParam("workspaceId") UUID workspaceId,
+            @RequestParam(value = "workspaceId", required = false) UUID workspaceId,
             @RequestParam(value = "documentId", required = false) UUID documentId,
             @RequestParam(value = "folderId", required = false) UUID folderId,
             @RequestParam(defaultValue = "false") boolean encrypt) {
@@ -71,9 +80,68 @@ public class FileAssetController {
 
             User user = userRepository.findById(userId).orElse(null);
             Document doc = documentId != null ? documentRepository.findById(documentId).orElse(null) : null;
+            Workspace ws = workspaceId != null ? workspaceRepository.findById(workspaceId).orElse(null) : (doc != null ? doc.getWorkspace() : null);
+            Folder folder = folderId != null ? folderRepository.findById(folderId).orElse(null) : (doc != null ? doc.getFolder() : null);
+
+            if (doc == null && ws != null) {
+                com.pusula.km.model.enums.DocumentType docType;
+                String extLower = extension.toLowerCase();
+                if (extLower.equals("pdf")) {
+                    docType = com.pusula.km.model.enums.DocumentType.PDF;
+                } else if (extLower.equals("docx") || extLower.equals("doc")) {
+                    docType = com.pusula.km.model.enums.DocumentType.WORD;
+                } else if (extLower.equals("xlsx") || extLower.equals("xls") || extLower.equals("csv")) {
+                    docType = com.pusula.km.model.enums.DocumentType.EXCEL;
+                } else if (extLower.equals("pptx") || extLower.equals("ppt")) {
+                    docType = com.pusula.km.model.enums.DocumentType.POWERPOINT;
+                } else {
+                    docType = com.pusula.km.model.enums.DocumentType.TEXT;
+                }
+
+                String docContent = "Uploaded document: " + originalFilename;
+                if (file.getContentType() != null && (file.getContentType().startsWith("text/") || extLower.equals("txt") || extLower.equals("md") || extLower.equals("csv"))) {
+                    try {
+                        String text = new String(file.getBytes(), java.nio.charset.StandardCharsets.UTF_8);
+                        if (!text.isBlank()) {
+                            docContent = text;
+                        }
+                    } catch (Exception ignored) {}
+                }
+
+                Document newDoc = Document.builder()
+                        .title(originalFilename != null ? originalFilename : "Uploaded Document")
+                        .workspace(ws)
+                        .folder(folder)
+                        .documentType(docType)
+                        .contentType(file.getContentType() != null ? file.getContentType() : "application/octet-stream")
+                        .content(docContent)
+                        .status(com.pusula.km.model.enums.DocumentStatus.ACTIVE)
+                        .sensitivityLevel(com.pusula.km.model.enums.SensitivityLevel.INTERNAL)
+                        .createdBy(user)
+                        .updatedBy(user)
+                        .build();
+
+                doc = documentRepository.save(newDoc);
+
+                com.pusula.km.model.entity.DocumentVersion v1 = com.pusula.km.model.entity.DocumentVersion.builder()
+                        .document(doc)
+                        .versionNumber(1)
+                        .content(docContent)
+                        .changeSummary("Initial upload of " + originalFilename)
+                        .createdBy(user)
+                        .build();
+                documentVersionRepository.save(v1);
+
+                if (user != null) {
+                    auditService.log(user.getId(), user.getRole(), com.pusula.km.model.enums.AuditAction.DOCUMENT_CREATED,
+                            "Document", doc.getId().toString(), doc.getTitle(), "127.0.0.1", true, null, "Created via file upload");
+                }
+            }
 
             FileAsset asset = FileAsset.builder()
                     .document(doc)
+                    .workspace(ws)
+                    .folder(folder)
                     .fileName(originalFilename != null ? originalFilename : "unnamed")
                     .fileType(extension)
                     .mimeType(file.getContentType())
@@ -85,6 +153,12 @@ public class FileAssetController {
                     .build();
 
             FileAsset saved = fileAssetRepository.save(asset);
+
+            if (user != null) {
+                auditService.log(user.getId(), user.getRole(), com.pusula.km.model.enums.AuditAction.FILE_UPLOADED,
+                        "FileAsset", saved.getId().toString(), saved.getFileName(), "127.0.0.1", true, null, "Uploaded to workspace");
+            }
+
             return ResponseEntity.ok(ApiResponse.success(fileAssetMapper.toResponse(saved), "File uploaded successfully"));
         } catch (com.pusula.km.exception.ValidationException | StorageException e) {
             throw e;
@@ -104,6 +178,14 @@ public class FileAssetController {
         List<FileAsset> filtered = new ArrayList<>();
         for (FileAsset a : all) {
             boolean match = true;
+            if (workspaceId != null) {
+                UUID aWsId = a.getWorkspace() != null ? a.getWorkspace().getId() : (a.getDocument() != null && a.getDocument().getWorkspace() != null ? a.getDocument().getWorkspace().getId() : null);
+                if (aWsId == null || !workspaceId.equals(aWsId)) match = false;
+            }
+            if (folderId != null) {
+                UUID aFolderId = a.getFolder() != null ? a.getFolder().getId() : (a.getDocument() != null && a.getDocument().getFolder() != null ? a.getDocument().getFolder().getId() : null);
+                if (aFolderId == null || !folderId.equals(aFolderId)) match = false;
+            }
             if (documentId != null) {
                 if (a.getDocument() == null || !documentId.equals(a.getDocument().getId())) match = false;
             }

@@ -1,5 +1,7 @@
 package com.pusula.km.model.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.pusula.km.model.enums.SensitivityLevel;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -22,6 +24,7 @@ import java.util.UUID;
     @Index(name = "idx_policy_active", columnList = "active")
 })
 @EntityListeners(AuditingEntityListener.class)
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class GovernancePolicy {
 
     @Id
@@ -40,6 +43,7 @@ public class GovernancePolicy {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "retention_rule_id")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
     private RetentionRule retentionRule;
 
     @Column(nullable = false)
@@ -47,6 +51,7 @@ public class GovernancePolicy {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by", nullable = false)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "passwordHash", "featurePermissions"})
     private User createdBy;
 
     @Builder.Default
@@ -60,6 +65,36 @@ public class GovernancePolicy {
 
     @Builder.Default
     private boolean requireApproval = false;
+
+    @JsonProperty("policyText")
+    public String getPolicyTextCamel() { return policyText; }
+
+    @JsonProperty("policy_text")
+    public String getPolicyTextSnake() { return policyText; }
+
+    @JsonProperty("sensitivityLevel")
+    public SensitivityLevel getSensitivityLevelCamel() { return sensitivityLevel; }
+
+    @JsonProperty("sensitivity_level")
+    public SensitivityLevel getSensitivityLevelSnake() { return sensitivityLevel; }
+
+    @JsonProperty("enforceOnCreate")
+    public boolean isEnforceOnCreateCamel() { return enforceOnCreate; }
+
+    @JsonProperty("enforce_on_create")
+    public boolean isEnforceOnCreateSnake() { return enforceOnCreate; }
+
+    @JsonProperty("enforceOnEdit")
+    public boolean isEnforceOnEditCamel() { return enforceOnEdit; }
+
+    @JsonProperty("enforce_on_edit")
+    public boolean isEnforceOnEditSnake() { return enforceOnEdit; }
+
+    @JsonProperty("requireApproval")
+    public boolean isRequireApprovalCamel() { return requireApproval; }
+
+    @JsonProperty("require_approval")
+    public boolean isRequireApprovalSnake() { return requireApproval; }
 
     @CreatedDate
     private Instant createdAt;

@@ -61,29 +61,29 @@ interface RetentionRule {
               <div class="policy-card">
                 <div class="policy-header">
                   <h3>{{ policy.name }}</h3>
-                  <span [class]="'pv-badge ' + getSensitivityBadgeClass(policy.sensitivityLevel)">
-                    {{ policy.sensitivityLevel }}
+                  <span [class]="'pv-badge ' + getSensitivityBadgeClass(policy.sensitivityLevel || $any(policy).sensitivity_level)">
+                    {{ policy.sensitivityLevel || $any(policy).sensitivity_level }}
                   </span>
                 </div>
                 <p class="policy-description">{{ policy.description }}</p>
-                <div class="policy-text">{{ policy.policyText }}</div>
+                <div class="policy-text">{{ policy.policyText || $any(policy).policy_text }}</div>
                 <div class="policy-settings">
                   <div class="setting-item">
                     <span class="setting-label">Enforce on Create:</span>
-                    <span [class]="'setting-value ' + (policy.enforceOnCreate ? 'enabled' : 'disabled')">
-                      {{ policy.enforceOnCreate ? 'Yes' : 'No' }}
+                    <span [class]="'setting-value ' + ((policy.enforceOnCreate ?? $any(policy).enforce_on_create) ? 'enabled' : 'disabled')">
+                      {{ (policy.enforceOnCreate ?? $any(policy).enforce_on_create) ? 'Yes' : 'No' }}
                     </span>
                   </div>
                   <div class="setting-item">
                     <span class="setting-label">Enforce on Edit:</span>
-                    <span [class]="'setting-value ' + (policy.enforceOnEdit ? 'enabled' : 'disabled')">
-                      {{ policy.enforceOnEdit ? 'Yes' : 'No' }}
+                    <span [class]="'setting-value ' + ((policy.enforceOnEdit ?? $any(policy).enforce_on_edit) ? 'enabled' : 'disabled')">
+                      {{ (policy.enforceOnEdit ?? $any(policy).enforce_on_edit) ? 'Yes' : 'No' }}
                     </span>
                   </div>
                   <div class="setting-item">
                     <span class="setting-label">Require Approval:</span>
-                    <span [class]="'setting-value ' + (policy.requireApproval ? 'enabled' : 'disabled')">
-                      {{ policy.requireApproval ? 'Yes' : 'No' }}
+                    <span [class]="'setting-value ' + ((policy.requireApproval ?? $any(policy).require_approval) ? 'enabled' : 'disabled')">
+                      {{ (policy.requireApproval ?? $any(policy).require_approval) ? 'Yes' : 'No' }}
                     </span>
                   </div>
                 </div>
@@ -120,18 +120,18 @@ interface RetentionRule {
                         <div class="rule-description">{{ rule.description }}</div>
                       </div>
                     </td>
-                    <td>{{ rule.retentionDays }} days</td>
+                    <td>{{ (rule.retentionDays ?? $any(rule).retention_days) }} days</td>
                     <td>
-                      <span [class]="'pv-badge ' + (rule.autoArchive ? 'pv-badge-green' : 'pv-badge-red')">
-                        {{ rule.autoArchive ? 'Yes' : 'No' }}
+                      <span [class]="'pv-badge ' + ((rule.autoArchive ?? $any(rule).auto_archive) ? 'pv-badge-green' : 'pv-badge-red')">
+                        {{ (rule.autoArchive ?? $any(rule).auto_archive) ? 'Yes' : 'No' }}
                       </span>
                     </td>
                     <td>
-                      <span [class]="'pv-badge ' + (rule.autoDelete ? 'pv-badge-red' : 'pv-badge-green')">
-                        {{ rule.autoDelete ? 'Yes' : 'No' }}
+                      <span [class]="'pv-badge ' + ((rule.autoDelete ?? $any(rule).auto_delete) ? 'pv-badge-red' : 'pv-badge-green')">
+                        {{ (rule.autoDelete ?? $any(rule).auto_delete) ? 'Yes' : 'No' }}
                       </span>
                     </td>
-                    <td>{{ rule.applicableDocumentTypes }}</td>
+                    <td>{{ rule.applicableDocumentTypes || $any(rule).applicable_document_types }}</td>
                   </tr>
                 }
               </tbody>
@@ -503,7 +503,7 @@ export class GovernanceComponent implements OnInit {
   }
 
   loadPolicies() {
-    this.apiService.get<GovernancePolicy[]>('/api/v1/governance/policies').subscribe({
+    this.apiService.get<GovernancePolicy[]>('/governance/policies').subscribe({
       next: (response) => {
         this.policies.set(response.data);
       },
@@ -512,7 +512,7 @@ export class GovernanceComponent implements OnInit {
   }
 
   loadRetentionRules() {
-    this.apiService.get<RetentionRule[]>('/api/v1/governance/retention-rules').subscribe({
+    this.apiService.get<RetentionRule[]>('/governance/retention-rules').subscribe({
       next: (response) => {
         this.retentionRules.set(response.data);
       },
@@ -522,10 +522,18 @@ export class GovernanceComponent implements OnInit {
 
   createPolicy() {
     if (this.policyForm.valid) {
-      this.apiService.post<GovernancePolicy>('/api/v1/governance/policies', this.policyForm.value).subscribe({
+      this.apiService.post<GovernancePolicy>('/governance/policies', this.policyForm.value).subscribe({
         next: () => {
           this.showCreatePolicyModal.set(false);
-          this.policyForm.reset();
+          this.policyForm.reset({
+            name: '',
+            description: '',
+            sensitivityLevel: 'INTERNAL',
+            policyText: '',
+            enforceOnCreate: true,
+            enforceOnEdit: true,
+            requireApproval: false
+          });
           this.loadPolicies();
         },
         error: (error: any) => console.error('Failed to create policy:', error)
@@ -535,10 +543,17 @@ export class GovernanceComponent implements OnInit {
 
   createRule() {
     if (this.ruleForm.valid) {
-      this.apiService.post<RetentionRule>('/api/v1/governance/retention-rules', this.ruleForm.value).subscribe({
+      this.apiService.post<RetentionRule>('/governance/retention-rules', this.ruleForm.value).subscribe({
         next: () => {
           this.showCreateRuleModal.set(false);
-          this.ruleForm.reset();
+          this.ruleForm.reset({
+            name: '',
+            description: '',
+            retentionDays: 2555,
+            applicableDocumentTypes: 'WORD,EXCEL,PDF',
+            autoArchive: true,
+            autoDelete: false
+          });
           this.loadRetentionRules();
         },
         error: (error: any) => console.error('Failed to create retention rule:', error)
@@ -547,7 +562,7 @@ export class GovernanceComponent implements OnInit {
   }
 
   togglePolicyActive(policy: GovernancePolicy) {
-    this.apiService.put<GovernancePolicy>(`/api/v1/governance/policies/${policy.id}/active`, { active: !policy.active }).subscribe({
+    this.apiService.put<GovernancePolicy>(`/governance/policies/${policy.id}/active`, { active: !policy.active }).subscribe({
       next: () => this.loadPolicies(),
       error: (error: any) => console.error('Failed to toggle policy:', error)
     });
